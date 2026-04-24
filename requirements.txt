@@ -1,0 +1,31 @@
+# NBA比赛预测系统依赖包
+# Python 3.9+ 兼容版本
+
+# Web框架
+Flask==2.3.3
+Werkzeug==2.3.7
+
+# 数据处理
+pandas==2.0.3
+numpy==1.24.3
+scikit-learn==1.3.1
+
+# 网络请求与解析
+requests==2.31.0
+beautifulsoup4==4.12.2
+lxml==4.9.3
+
+# 数据库
+# SQLite为Python内置，无需额外安装
+
+# 可选：Selenium（用于处理JavaScript动态加载的页面）
+# selenium==4.12.0
+
+# 日志与配置
+python-dotenv==1.0.0
+
+# 测试
+pytest==7.4.2
+
+# 数据验证
+pydantic==2.4.2

@@ -1,0 +1,44 @@
+2026-04-24 11:27:42,860 - nba_prediction - INFO - 数据库管理器初始化，数据库路径: /app/data/所有对话/主对话/NBA比赛预测项目/data/nba.db
+2026-04-24 11:27:57,442 - nba_prediction - INFO - 数据库管理器初始化，数据库路径: /app/data/所有对话/主对话/NBA比赛预测项目/data/nba.db
+2026-04-24 11:28:15,357 - nba_prediction - INFO - 数据库管理器初始化，数据库路径: /app/data/所有对话/主对话/NBA比赛预测项目/data/nba.db
+2026-04-24 11:28:15,444 - nba_prediction - INFO - 数据库连接已建立
+2026-04-24 11:28:16,626 - nba_prediction - INFO - 数据库表创建完成
+2026-04-24 11:28:16,626 - nba_prediction - INFO - 数据库初始化完成
+2026-04-24 11:28:40,778 - nba_prediction - INFO - 数据库管理器初始化，数据库路径: /app/data/所有对话/主对话/NBA比赛预测项目/data/nba.db
+2026-04-24 11:28:40,932 - nba_prediction - INFO - 数据库连接已建立
+2026-04-24 11:28:41,350 - nba_prediction - INFO - 数据库表创建完成
+2026-04-24 11:28:41,350 - nba_prediction - INFO - 数据库初始化完成
+2026-04-24 11:28:55,262 - nba_prediction - INFO - 数据库管理器初始化，数据库路径: /app/data/所有对话/主对话/NBA比赛预测项目/data/nba.db
+2026-04-24 11:28:55,330 - nba_prediction - INFO - 数据库连接已建立
+2026-04-24 11:28:55,740 - nba_prediction - INFO - 数据库表创建完成
+2026-04-24 11:28:55,741 - nba_prediction - INFO - 数据库初始化完成
+2026-04-24 11:28:55,762 - nba_prediction - ERROR - 预测失败: predict_game() takes 0 positional arguments but 2 were given
+2026-04-24 11:29:35,187 - nba_prediction - INFO - 数据库管理器初始化，数据库路径: /app/data/所有对话/主对话/NBA比赛预测项目/data/nba.db
+2026-04-24 11:29:35,318 - nba_prediction - INFO - 数据库连接已建立
+2026-04-24 11:29:35,704 - nba_prediction - INFO - 数据库表创建完成
+2026-04-24 11:29:35,704 - nba_prediction - INFO - 数据库初始化完成
+2026-04-24 11:29:35,731 - nba_prediction - ERROR - 预测失败: predict_game() takes 0 positional arguments but 2 were given
+2026-04-24 11:30:35,958 - nba_prediction - INFO - 数据库管理器初始化，数据库路径: /app/data/所有对话/主对话/NBA比赛预测项目/data/nba.db
+2026-04-24 11:30:36,013 - nba_prediction - INFO - 数据库连接已建立
+2026-04-24 11:30:36,634 - nba_prediction - INFO - 数据库表创建完成
+2026-04-24 11:30:36,634 - nba_prediction - INFO - 数据库初始化完成
+2026-04-24 11:30:36,661 - nba_prediction - ERROR - 预测失败: predict_game() takes 0 positional arguments but 2 were given
+2026-04-24 11:31:05,084 - nba_prediction - INFO - 数据库管理器初始化，数据库路径: /app/data/所有对话/主对话/NBA比赛预测项目/data/nba.db
+2026-04-24 11:31:05,138 - nba_prediction - INFO - 数据库连接已建立
+2026-04-24 11:31:05,529 - nba_prediction - INFO - 数据库表创建完成
+2026-04-24 11:31:05,529 - nba_prediction - INFO - 数据库初始化完成
+2026-04-24 11:31:33,564 - nba_prediction - INFO - 数据库管理器初始化，数据库路径: /app/data/所有对话/主对话/NBA比赛预测项目/data/nba.db
+2026-04-24 11:31:33,721 - nba_prediction - INFO - 数据库连接已建立
+2026-04-24 11:31:34,167 - nba_prediction - INFO - 数据库表创建完成
+2026-04-24 11:31:34,168 - nba_prediction - INFO - 数据库初始化完成
+2026-04-24 13:42:11,958 - nba_prediction - INFO - 数据库管理器初始化，数据库路径: G:\NBA比赛预测项目\data\nba.db
+2026-04-24 13:42:11,965 - nba_prediction - INFO - 数据库连接已建立
+2026-04-24 13:42:11,970 - nba_prediction - INFO - 数据库表创建完成
+2026-04-24 13:42:11,971 - nba_prediction - INFO - 数据库初始化完成
+2026-04-24 13:42:14,369 - nba_prediction - INFO - 数据库管理器初始化，数据库路径: G:\NBA比赛预测项目\data\nba.db
+2026-04-24 13:42:14,372 - nba_prediction - INFO - 数据库连接已建立
+2026-04-24 13:42:14,374 - nba_prediction - INFO - 数据库表创建完成
+2026-04-24 13:42:14,374 - nba_prediction - INFO - 数据库初始化完成
+2026-04-24 13:43:06,935 - nba_prediction - ERROR - 数据库操作失败: UNIQUE constraint failed: prediction_results.prediction_id
+2026-04-24 13:43:06,935 - nba_prediction - ERROR - 函数 insert_prediction 执行失败，耗时: 0.00s，错误: UNIQUE constraint failed: prediction_results.prediction_id
+2026-04-24 13:43:06,935 - nba_prediction - WARNING - 保存预测结果失败: UNIQUE constraint failed: prediction_results.prediction_id
