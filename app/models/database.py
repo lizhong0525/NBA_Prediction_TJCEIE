@@ -1,17 +1,24 @@
 # -*- coding: utf-8 -*-
 """
-数据库管理模块
-负责SQLite数据库的创建、表结构和数据操作
+SQLite database helpers for the NBA prediction project.
+
+The original project stores crawled data, season summaries, clustering output
+and prediction history in a single local database. This module keeps that API
+stable while making prediction persistence tolerant of the newer web payloads.
 """
 
+from __future__ import annotations
+
+import json
 import sqlite3
-from typing import List, Dict, Optional, Any
-from pathlib import Path
 from contextlib import contextmanager
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
-from datetime import datetime
 
 import sys
+
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from config import DATABASE_CONFIG
@@ -19,84 +26,55 @@ from utils import logger, log_function_call
 
 
 class DatabaseManager:
-    """
-    SQLite数据库管理器
-    
-    功能：
-    - 数据库连接管理
-    - 创建数据表
-    - 增删改查操作
-    - 数据导入导出
-    """
-    
+    """Thin SQLite wrapper used by the Flask app and utility scripts."""
+
     def __init__(self, db_path: str = None):
-        """
-        初始化数据库管理器
-        
-        Args:
-            db_path: 数据库文件路径，默认使用配置中的路径
-        """
         if db_path is None:
-            db_path = str(DATABASE_CONFIG['path'])
-        
+            db_path = str(DATABASE_CONFIG["path"])
+
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        self.connection = None
-        logger.info(f"数据库管理器初始化，数据库路径: {self.db_path}")
-    
+        self.connection: Optional[sqlite3.Connection] = None
+        logger.info("DatabaseManager initialized at %s", self.db_path)
+
     def connect(self):
-        """建立数据库连接"""
         if self.connection is None:
             self.connection = sqlite3.connect(
                 self.db_path,
-                timeout=DATABASE_CONFIG.get('timeout', 30),
-                check_same_thread=DATABASE_CONFIG.get('check_same_thread', False)
+                timeout=DATABASE_CONFIG.get("timeout", 30),
+                check_same_thread=DATABASE_CONFIG.get("check_same_thread", False),
             )
-            # 启用外键约束
             self.connection.execute("PRAGMA foreign_keys = ON")
-            logger.info("数据库连接已建立")
-    
+            logger.info("Database connection established")
+
     def close(self):
-        """关闭数据库连接"""
-        if self.connection:
+        if self.connection is not None:
             self.connection.close()
             self.connection = None
-            logger.info("数据库连接已关闭")
-    
+            logger.info("Database connection closed")
+
     @contextmanager
     def get_cursor(self):
-        """
-        获取数据库游标的上下文管理器
-        
-        Usage:
-            with db.get_cursor() as cursor:
-                cursor.execute(...)
-        """
         if self.connection is None:
             self.connect()
-        
+
         cursor = self.connection.cursor()
         try:
             yield cursor
             self.connection.commit()
-        except Exception as e:
+        except Exception as exc:
             self.connection.rollback()
-            logger.error(f"数据库操作失败: {e}")
+            logger.error("Database operation failed: %s", exc)
             raise
         finally:
             cursor.close()
-    
+
     @log_function_call
     def create_tables(self):
-        """
-        创建所有数据表
-        """
         self.connect()
-        
         with self.get_cursor() as cursor:
-            # 球队比赛数据表
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS team_game_stats (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     game_id VARCHAR(30) UNIQUE NOT NULL,
@@ -131,18 +109,17 @@ class DatabaseManager:
                     plus_minus INTEGER,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-            """)
-            
-            # 创建索引
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_game_date ON team_game_stats(game_date)
-            """)
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_team_season ON team_game_stats(team_abbr, season)
-            """)
-            
-            # 球队赛季统计表
-            cursor.execute("""
+                """
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_game_date ON team_game_stats(game_date)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_team_season ON team_game_stats(team_abbr, season)"
+            )
+
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS team_season_stats (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     team_id VARCHAR(20) NOT NULL,
@@ -174,10 +151,11 @@ class DatabaseManager:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(team_id, season)
                 )
-            """)
-            
-            # 球员数据表
-            cursor.execute("""
+                """
+            )
+
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS player_stats (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     player_id VARCHAR(30) UNIQUE,
@@ -199,10 +177,11 @@ class DatabaseManager:
                     ft_pct REAL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-            """)
-            
-            # 预测结果表
-            cursor.execute("""
+                """
+            )
+
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS prediction_results (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     prediction_id VARCHAR(30) UNIQUE NOT NULL,
@@ -218,10 +197,11 @@ class DatabaseManager:
                     is_correct BOOLEAN,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-            """)
-            
-            # 球队风格分类表
-            cursor.execute("""
+                """
+            )
+
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS team_clusters (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     team_id VARCHAR(20) NOT NULL,
@@ -234,10 +214,11 @@ class DatabaseManager:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(team_id, season)
                 )
-            """)
-            
-            # 爬虫任务日志表
-            cursor.execute("""
+                """
+            )
+
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS crawl_logs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     task_type VARCHAR(50) NOT NULL,
@@ -249,28 +230,19 @@ class DatabaseManager:
                     completed_at TIMESTAMP,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-            """)
-        
-        logger.info("数据库表创建完成")
-    
+                """
+            )
+
+        logger.info("Database tables created")
+
     @log_function_call
     def insert_game_data(self, games: List[Dict[str, Any]]) -> int:
-        """
-        批量插入比赛数据
-        
-        Args:
-            games: 比赛数据列表
-            
-        Returns:
-            插入的记录数
-        """
         if not games:
             return 0
-        
+
         self.connect()
-        
         insert_sql = """
-            INSERT OR REPLACE INTO team_game_stats 
+            INSERT OR REPLACE INTO team_game_stats
             (game_id, game_date, season, team_id, team_abbr, team_name,
              opponent_id, opponent_abbr, opponent_name, is_home, result,
              points, opponent_points, point_diff, fg_made, fg_attempts, fg_pct,
@@ -278,63 +250,54 @@ class DatabaseManager:
              rebounds, assists, steals, blocks, turnovers, fouls)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
-        
+
         count = 0
         with self.get_cursor() as cursor:
             for game in games:
-                values = (
-                    game.get('game_id', ''),
-                    game.get('game_date', ''),
-                    game.get('season', ''),
-                    game.get('team_id', ''),
-                    game.get('team_abbr', ''),
-                    game.get('team_name', ''),
-                    game.get('opponent_id', ''),
-                    game.get('opponent_abbr', ''),
-                    game.get('opponent_name', ''),
-                    int(game.get('is_home', False)),
-                    game.get('result', ''),
-                    game.get('points', 0),
-                    game.get('opponent_points', 0),
-                    game.get('point_diff', 0),
-                    game.get('fg_made', 0),
-                    game.get('fg_attempts', 0),
-                    game.get('fg_pct', 0),
-                    game.get('fg3_made', 0),
-                    game.get('fg3_attempts', 0),
-                    game.get('fg3_pct', 0),
-                    game.get('ft_made', 0),
-                    game.get('ft_attempts', 0),
-                    game.get('ft_pct', 0),
-                    game.get('rebounds', 0),
-                    game.get('assists', 0),
-                    game.get('steals', 0),
-                    game.get('blocks', 0),
-                    game.get('turnovers', 0),
-                    game.get('fouls', 0)
+                cursor.execute(
+                    insert_sql,
+                    (
+                        game.get("game_id", ""),
+                        game.get("game_date", ""),
+                        game.get("season", ""),
+                        game.get("team_id", ""),
+                        game.get("team_abbr", ""),
+                        game.get("team_name", ""),
+                        game.get("opponent_id", ""),
+                        game.get("opponent_abbr", ""),
+                        game.get("opponent_name", ""),
+                        int(game.get("is_home", False)),
+                        game.get("result", ""),
+                        game.get("points", 0),
+                        game.get("opponent_points", 0),
+                        game.get("point_diff", 0),
+                        game.get("fg_made", 0),
+                        game.get("fg_attempts", 0),
+                        game.get("fg_pct", 0),
+                        game.get("fg3_made", 0),
+                        game.get("fg3_attempts", 0),
+                        game.get("fg3_pct", 0),
+                        game.get("ft_made", 0),
+                        game.get("ft_attempts", 0),
+                        game.get("ft_pct", 0),
+                        game.get("rebounds", 0),
+                        game.get("assists", 0),
+                        game.get("steals", 0),
+                        game.get("blocks", 0),
+                        game.get("turnovers", 0),
+                        game.get("fouls", 0),
+                    ),
                 )
-                cursor.execute(insert_sql, values)
                 count += 1
-        
-        logger.info(f"成功插入 {count} 条比赛数据")
+        logger.info("Inserted %s game records", count)
         return count
-    
+
     @log_function_call
     def insert_season_stats(self, stats: List[Dict[str, Any]]) -> int:
-        """
-        批量插入球队赛季统计
-        
-        Args:
-            stats: 赛季统计数据列表
-            
-        Returns:
-            插入的记录数
-        """
         if not stats:
             return 0
-        
+
         self.connect()
-        
         insert_sql = """
             INSERT OR REPLACE INTO team_season_stats
             (team_id, team_abbr, team_name, season, games_played, wins, losses,
@@ -344,328 +307,289 @@ class DatabaseManager:
              away_wins, away_games, away_win_pct, point_diff)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
-        
+
         count = 0
         with self.get_cursor() as cursor:
             for stat in stats:
-                values = (
-                    stat.get('team_id', ''),
-                    stat.get('team_abbr', ''),
-                    stat.get('team_name', ''),
-                    stat.get('season', ''),
-                    stat.get('games_played', 0),
-                    stat.get('wins', 0),
-                    stat.get('losses', 0),
-                    stat.get('win_pct', 0),
-                    stat.get('avg_points', 0),
-                    stat.get('avg_points_allowed', 0),
-                    stat.get('avg_fg_pct', 0),
-                    stat.get('avg_fg3_pct', 0),
-                    stat.get('avg_ft_pct', 0),
-                    stat.get('avg_rebounds', 0),
-                    stat.get('avg_assists', 0),
-                    stat.get('avg_steals', 0),
-                    stat.get('avg_blocks', 0),
-                    stat.get('avg_turnovers', 0),
-                    stat.get('avg_fouls', 0),
-                    stat.get('home_wins', 0),
-                    stat.get('home_losses', 0),
-                    stat.get('home_win_pct', 0),
-                    stat.get('away_wins', 0),
-                    stat.get('away_games', 0),
-                    stat.get('away_win_pct', 0),
-                    stat.get('point_diff', 0)
+                cursor.execute(
+                    insert_sql,
+                    (
+                        stat.get("team_id", ""),
+                        stat.get("team_abbr", ""),
+                        stat.get("team_name", ""),
+                        stat.get("season", ""),
+                        stat.get("games_played", 0),
+                        stat.get("wins", 0),
+                        stat.get("losses", 0),
+                        stat.get("win_pct", 0),
+                        stat.get("avg_points", 0),
+                        stat.get("avg_points_allowed", 0),
+                        stat.get("avg_fg_pct", 0),
+                        stat.get("avg_fg3_pct", 0),
+                        stat.get("avg_ft_pct", 0),
+                        stat.get("avg_rebounds", 0),
+                        stat.get("avg_assists", 0),
+                        stat.get("avg_steals", 0),
+                        stat.get("avg_blocks", 0),
+                        stat.get("avg_turnovers", 0),
+                        stat.get("avg_fouls", 0),
+                        stat.get("home_wins", 0),
+                        stat.get("home_losses", 0),
+                        stat.get("home_win_pct", 0),
+                        stat.get("away_wins", 0),
+                        stat.get("away_games", 0),
+                        stat.get("away_win_pct", 0),
+                        stat.get("point_diff", 0),
+                    ),
                 )
-                cursor.execute(insert_sql, values)
                 count += 1
-        
-        logger.info(f"成功插入 {count} 条赛季统计")
+        logger.info("Inserted %s season stat records", count)
         return count
-    
+
     @log_function_call
     def insert_prediction(self, prediction: Dict[str, Any]) -> bool:
-        """
-        插入预测结果
-        
-        Args:
-            prediction: 预测数据字典
-            
-        Returns:
-            是否成功
-        """
         self.connect()
-        
+
         insert_sql = """
-            INSERT INTO prediction_results
+            INSERT OR REPLACE INTO prediction_results
             (prediction_id, game_id, home_team, away_team, predicted_winner,
              win_probability, confidence_level, key_factors, model_version)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
-        
-        import json
-        
+
+        win_probability = prediction.get("win_probability")
+        if win_probability is None:
+            win_probability = prediction.get("home_win_probability")
+        if win_probability is None:
+            win_probability = prediction.get("home_win_prob", 0.5)
+        win_probability = float(win_probability)
+
+        confidence_level = (
+            prediction.get("confidence_level")
+            or prediction.get("confidence")
+            or "MEDIUM"
+        )
+        confidence_level = str(confidence_level).upper()
+
+        key_factors = prediction.get("key_factors", [])
+        if not isinstance(key_factors, str):
+            key_factors = json.dumps(key_factors, ensure_ascii=False)
+
+        model_version = (
+            prediction.get("model_version")
+            or prediction.get("mode")
+            or "2.0"
+        )
+
         with self.get_cursor() as cursor:
-            cursor.execute(insert_sql, (
-                prediction.get('prediction_id', ''),
-                prediction.get('game_id', ''),
-                prediction.get('home_team', ''),
-                prediction.get('away_team', ''),
-                prediction.get('predicted_winner', ''),
-                prediction.get('win_probability', 0.5),
-                prediction.get('confidence_level', 'MEDIUM'),
-                json.dumps(prediction.get('key_factors', [])),
-                prediction.get('model_version', '1.0')
-            ))
-        
+            cursor.execute(
+                insert_sql,
+                (
+                    prediction.get("prediction_id", ""),
+                    prediction.get("game_id", ""),
+                    prediction.get("home_team", ""),
+                    prediction.get("away_team", ""),
+                    prediction.get("predicted_winner", ""),
+                    win_probability,
+                    confidence_level,
+                    key_factors,
+                    str(model_version),
+                ),
+            )
+
         return True
-    
-    def get_game_data(self, team_abbr: str = None, season: str = None, 
-                      limit: int = 100) -> pd.DataFrame:
-        """
-        获取比赛数据
-        
-        Args:
-            team_abbr: 球队缩写
-            season: 赛季
-            limit: 返回条数限制
-            
-        Returns:
-            DataFrame格式的比赛数据
-        """
+
+    def get_game_data(
+        self,
+        team_abbr: str = None,
+        season: str = None,
+        limit: int = 100,
+    ) -> pd.DataFrame:
         self.connect()
-        
         query = "SELECT * FROM team_game_stats WHERE 1=1"
-        params = []
-        
+        params: List[Any] = []
+
         if team_abbr:
             query += " AND (team_abbr = ? OR opponent_abbr = ?)"
             params.extend([team_abbr, team_abbr])
-        
         if season:
             query += " AND season = ?"
             params.append(season)
-        
+
         query += " ORDER BY game_date DESC LIMIT ?"
         params.append(limit)
-        
-        df = pd.read_sql_query(query, self.connection, params=params)
-        return df
-    
-    def get_team_season_stats(self, team_abbr: str = None, 
-                              season: str = None) -> pd.DataFrame:
-        """
-        获取球队赛季统计
-        
-        Args:
-            team_abbr: 球队缩写
-            season: 赛季
-            
-        Returns:
-            DataFrame格式的赛季统计
-        """
+        return pd.read_sql_query(query, self.connection, params=params)
+
+    def get_team_season_stats(
+        self,
+        team_abbr: str = None,
+        season: str = None,
+    ) -> pd.DataFrame:
         self.connect()
-        
         query = "SELECT * FROM team_season_stats WHERE 1=1"
-        params = []
-        
+        params: List[Any] = []
+
         if team_abbr:
             query += " AND team_abbr = ?"
             params.append(team_abbr)
-        
         if season:
             query += " AND season = ?"
             params.append(season)
-        
+
         query += " ORDER BY win_pct DESC"
-        
-        df = pd.read_sql_query(query, self.connection, params=params)
-        return df
-    
+        return pd.read_sql_query(query, self.connection, params=params)
+
     def get_recent_predictions(self, limit: int = 10) -> List[Dict[str, Any]]:
-        """
-        获取最近的预测记录
-        
-        Args:
-            limit: 返回条数
-            
-        Returns:
-            预测记录列表
-        """
         self.connect()
-        
-        query = """
-            SELECT * FROM prediction_results 
-            ORDER BY created_at DESC 
-            LIMIT ?
-        """
-        
-        df = pd.read_sql_query(query, self.connection, params=[limit])
-        
-        # 转换日期格式
-        df['created_at'] = pd.to_datetime(df['created_at'])
-        
-        return df.to_dict('records')
-    
-    def get_prediction_accuracy(self) -> Dict[str, Any]:
-        """
-        获取预测准确率统计
-        
-        Returns:
-            准确率统计字典
-        """
-        self.connect()
-        
-        query = """
-            SELECT 
-                COUNT(*) as total,
-                SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) as correct,
-                AVG(CASE WHEN is_correct = 1 THEN 1.0 ELSE 0.0 END) as accuracy,
-                AVG(win_probability) as avg_confidence
+        df = pd.read_sql_query(
+            """
+            SELECT *
             FROM prediction_results
-            WHERE is_correct IS NOT NULL
-        """
-        
-        df = pd.read_sql_query(query, self.connection)
-        
-        if len(df) > 0:
-            return df.iloc[0].to_dict()
-        return {'total': 0, 'correct': 0, 'accuracy': 0}
-    
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            self.connection,
+            params=[limit],
+        )
+        if df.empty:
+            return []
+
+        df["created_at"] = pd.to_datetime(df["created_at"], errors="coerce")
+        df["created_at"] = df["created_at"].dt.strftime("%Y-%m-%d %H:%M:%S")
+
+        results: List[Dict[str, Any]] = []
+        for row in df.to_dict("records"):
+            key_factors = row.get("key_factors") or "[]"
+            if isinstance(key_factors, str):
+                try:
+                    key_factors = json.loads(key_factors)
+                except json.JSONDecodeError:
+                    key_factors = []
+
+            home_win_prob = float(row.get("win_probability") or 0.5)
+            home_win_prob = min(max(home_win_prob, 0.0), 1.0)
+            confidence_level = str(row.get("confidence_level") or "MEDIUM").upper()
+
+            results.append(
+                {
+                    "prediction_id": row.get("prediction_id"),
+                    "game_id": row.get("game_id"),
+                    "home_team": row.get("home_team"),
+                    "away_team": row.get("away_team"),
+                    "predicted_winner": row.get("predicted_winner"),
+                    "home_win_prob": round(home_win_prob, 4),
+                    "away_win_prob": round(1.0 - home_win_prob, 4),
+                    "home_win_probability": round(home_win_prob, 4),
+                    "away_win_probability": round(1.0 - home_win_prob, 4),
+                    "confidence_level": confidence_level,
+                    "confidence": confidence_level.lower(),
+                    "key_factors": key_factors,
+                    "model_version": row.get("model_version"),
+                    "actual_result": row.get("actual_result"),
+                    "is_correct": row.get("is_correct"),
+                    "prediction_time": row.get("created_at"),
+                    "created_at": row.get("created_at"),
+                }
+            )
+
+        return results
+
+    def get_prediction_accuracy(self) -> Dict[str, Any]:
+        self.connect()
+        df = pd.read_sql_query(
+            """
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN is_correct IS NOT NULL THEN 1 ELSE 0 END) as evaluated,
+                SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) as correct,
+                AVG(
+                    CASE
+                        WHEN is_correct IS NOT NULL THEN
+                            CASE WHEN is_correct = 1 THEN 1.0 ELSE 0.0 END
+                        ELSE NULL
+                    END
+                ) as accuracy,
+                AVG(
+                    CASE
+                        WHEN win_probability IS NOT NULL THEN
+                            CASE
+                                WHEN win_probability >= 0.5 THEN win_probability
+                                ELSE 1.0 - win_probability
+                            END
+                        ELSE NULL
+                    END
+                ) as avg_confidence
+            FROM prediction_results
+            """,
+            self.connection,
+        )
+
+        if df.empty:
+            return {
+                "total": 0,
+                "evaluated": 0,
+                "correct": 0,
+                "accuracy": 0.0,
+                "avg_confidence": 0.0,
+            }
+
+        row = df.iloc[0].to_dict()
+        return {
+            "total": int(row.get("total") or 0),
+            "evaluated": int(row.get("evaluated") or 0),
+            "correct": int(row.get("correct") or 0),
+            "accuracy": float(row.get("accuracy") or 0.0),
+            "avg_confidence": float(row.get("avg_confidence") or 0.0),
+        }
+
     def update_prediction_result(self, prediction_id: str, actual_result: str) -> bool:
-        """
-        更新预测结果
-        
-        Args:
-            prediction_id: 预测ID
-            actual_result: 实际结果（W/L）
-            
-        Returns:
-            是否成功
-        """
         self.connect()
-        
-        query = """
-            UPDATE prediction_results 
-            SET actual_result = ?,
-                is_correct = CASE 
-                    WHEN predicted_winner LIKE ? THEN 1 
-                    ELSE 0 
-                END
-            WHERE prediction_id = ?
-        """
-        
-        # 判断预测是否正确（简化逻辑）
         with self.get_cursor() as cursor:
-            cursor.execute(query, (actual_result, f'%{actual_result}%', prediction_id))
-        
+            cursor.execute(
+                """
+                UPDATE prediction_results
+                SET actual_result = ?,
+                    is_correct = CASE
+                        WHEN predicted_winner = ? THEN 1
+                        ELSE 0
+                    END
+                WHERE prediction_id = ?
+                """,
+                (actual_result, actual_result, prediction_id),
+            )
         return True
-    
+
     def execute_query(self, query: str, params: tuple = None) -> List[tuple]:
-        """
-        执行自定义查询
-        
-        Args:
-            query: SQL查询语句
-            params: 查询参数
-            
-        Returns:
-            查询结果列表
-        """
         self.connect()
-        
         with self.get_cursor() as cursor:
             cursor.execute(query, params or ())
             return cursor.fetchall()
-    
+
     def get_table_stats(self) -> Dict[str, int]:
-        """
-        获取各表记录数统计
-        
-        Returns:
-            表名和记录数字典
-        """
         self.connect()
-        
-        tables = ['team_game_stats', 'team_season_stats', 'player_stats', 
-                 'prediction_results', 'team_clusters']
-        
-        stats = {}
+        tables = [
+            "team_game_stats",
+            "team_season_stats",
+            "player_stats",
+            "prediction_results",
+            "team_clusters",
+        ]
+        stats: Dict[str, int] = {}
         with self.get_cursor() as cursor:
             for table in tables:
                 cursor.execute(f"SELECT COUNT(*) FROM {table}")
-                stats[table] = cursor.fetchone()[0]
-        
+                stats[table] = int(cursor.fetchone()[0])
         return stats
 
 
 def init_database(db_path: str = None) -> DatabaseManager:
-    """
-    初始化数据库
-    
-    Args:
-        db_path: 数据库路径
-        
-    Returns:
-        DatabaseManager实例
-    """
     db = DatabaseManager(db_path)
     db.create_tables()
-    logger.info("数据库初始化完成")
+    logger.info("Database initialized")
     return db
 
 
-# 测试代码
-if __name__ == '__main__':
-    print("测试数据库模块...")
-    
-    # 初始化数据库
+if __name__ == "__main__":
     db = init_database()
-    
-    # 创建测试数据
-    test_games = [
-        {
-            'game_id': '20240115LALGSW',
-            'game_date': '2024-01-15',
-            'season': '2023-24',
-            'team_id': '1610612747',
-            'team_abbr': 'LAL',
-            'team_name': 'Los Angeles Lakers',
-            'opponent_id': '1610612744',
-            'opponent_abbr': 'GSW',
-            'opponent_name': 'Golden State Warriors',
-            'is_home': True,
-            'result': 'W',
-            'points': 118,
-            'opponent_points': 112,
-            'point_diff': 6,
-            'fg_made': 45,
-            'fg_attempts': 92,
-            'fg_pct': 0.489,
-            'fg3_made': 16,
-            'fg3_attempts': 38,
-            'fg3_pct': 0.421,
-            'ft_made': 12,
-            'ft_attempts': 15,
-            'ft_pct': 0.800,
-            'rebounds': 47,
-            'assists': 28,
-            'steals': 9,
-            'blocks': 5,
-            'turnovers': 14,
-            'fouls': 18
-        }
-    ]
-    
-    # 插入测试数据
-    db.insert_game_data(test_games)
-    
-    # 查询数据
-    df = db.get_game_data(limit=10)
-    print(f"数据库中比赛记录数: {len(df)}")
-    
-    # 获取统计信息
-    stats = db.get_table_stats()
-    print(f"各表记录数: {stats}")
-    
+    print(db.get_table_stats())
     db.close()
-    print("数据库测试完成")

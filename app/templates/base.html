@@ -3,70 +3,61 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="NBA比赛预测系统 - 基于机器学习的NBA比赛结果预测">
-    <meta name="keywords" content="NBA, 篮球预测, 机器学习, 比赛预测">
-    <title>{% block title %}NBA比赛预测系统{% endblock %}</title>
-    
-    <!-- Bootstrap CSS -->
+    <meta name="description" content="基于历史球队特征与可解释分析的 NBA 比赛结果预测系统">
+    <meta name="keywords" content="NBA, 比赛预测, 数据分析, 机器学习, 篮球">
+    <title>{% block title %}NBA 比赛预测系统{% endblock %}</title>
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Font Awesome -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <!-- ECharts -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
-    
-    <!-- 自定义样式 -->
     <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
-    
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-    <!-- 导航栏 -->
     <nav class="navbar navbar-expand-lg navbar-dark sticky-top">
         <div class="container">
             <a class="navbar-brand" href="{{ url_for('pages.index') }}">
                 <i class="fas fa-basketball"></i>
                 <span>NBA Predictor</span>
             </a>
-            
+
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
-            
+
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'pages.index' %}active{% endif %}" 
-                           href="{{ url_for('pages.index') }}">
-                            <i class="fas fa-home me-1"></i>首页
+                        <a class="nav-link {% if request.endpoint == 'pages.index' %}active{% endif %}" href="{{ url_for('pages.index') }}">
+                            <i class="fas fa-house me-1"></i>首页
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'pages.predict_page' %}active{% endif %}" 
-                           href="{{ url_for('pages.predict_page') }}">
+                        <a class="nav-link {% if request.endpoint == 'pages.predict_page' %}active{% endif %}" href="{{ url_for('pages.predict_page') }}">
                             <i class="fas fa-chart-line me-1"></i>比赛预测
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'pages.data_page' %}active{% endif %}" 
-                           href="{{ url_for('pages.data_page') }}">
+                        <a class="nav-link {% if request.endpoint == 'pages.data_page' %}active{% endif %}" href="{{ url_for('pages.data_page') }}">
                             <i class="fas fa-database me-1"></i>数据中心
                         </a>
                     </li>
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="teamsDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-users me-1"></i>球队
+                            <i class="fas fa-users me-1"></i>球队入口
                         </a>
                         <ul class="dropdown-menu dropdown-menu-dark" id="teams-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('pages.data_page') }}#teams">
-                                <i class="fas fa-list me-2"></i>所有球队
-                            </a></li>
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('pages.data_page') }}#teams">
+                                    <i class="fas fa-table me-2"></i>查看全部球队
+                                </a>
+                            </li>
                             <li><hr class="dropdown-divider"></li>
                         </ul>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'pages.about_page' %}active{% endif %}" 
-                           href="{{ url_for('pages.about_page') }}">
-                            <i class="fas fa-info-circle me-1"></i>关于
+                        <a class="nav-link {% if request.endpoint == 'pages.about_page' %}active{% endif %}" href="{{ url_for('pages.about_page') }}">
+                            <i class="fas fa-circle-info me-1"></i>关于项目
                         </a>
                     </li>
                 </ul>
@@ -74,98 +65,86 @@
         </div>
     </nav>
 
-    <!-- 主内容区 -->
     <main>
         {% block content %}{% endblock %}
     </main>
 
-    <!-- 页脚 -->
     <footer class="mt-5 py-4">
         <div class="container">
-            <div class="row">
-                <div class="col-md-4 mb-3 mb-md-0">
+            <div class="row g-4">
+                <div class="col-lg-4">
                     <h5 class="text-nba-orange mb-3">
-                        <i class="fas fa-basketball me-2"></i>NBA比赛预测系统
+                        <i class="fas fa-basketball me-2"></i>NBA 比赛预测系统
                     </h5>
                     <p class="text-secondary small mb-0">
-                        基于机器学习算法，结合历史数据和球队表现，提供NBA比赛结果预测服务。
+                        使用球队赛季特征、近期状态、主客场表现和风格聚类结果，
+                        同时完成胜负概率预测、分差估计和关键因素解释。
                     </p>
                 </div>
-                <div class="col-md-2 mb-3 mb-md-0">
-                    <h6 class="text-white mb-3">快速链接</h6>
+                <div class="col-lg-2">
+                    <h6 class="text-white mb-3">快速入口</h6>
                     <ul class="list-unstyled small">
-                        <li><a href="{{ url_for('pages.index') }}" class="text-secondary">首页</a></li>
-                        <li><a href="{{ url_for('pages.predict_page') }}" class="text-secondary">比赛预测</a></li>
+                        <li class="mb-2"><a href="{{ url_for('pages.index') }}" class="text-secondary">首页</a></li>
+                        <li class="mb-2"><a href="{{ url_for('pages.predict_page') }}" class="text-secondary">比赛预测</a></li>
                         <li><a href="{{ url_for('pages.data_page') }}" class="text-secondary">数据中心</a></li>
                     </ul>
                 </div>
-                <div class="col-md-2 mb-3 mb-md-0">
-                    <h6 class="text-white mb-3">数据分析</h6>
-                    <ul class="list-unstyled small">
-                        <li><a href="{{ url_for('pages.data_page') }}#stats" class="text-secondary">数据统计</a></li>
-                        <li><a href="{{ url_for('pages.data_page') }}#ranking" class="text-secondary">球队排名</a></li>
-                        <li><a href="{{ url_for('pages.about_page') }}" class="text-secondary">系统介绍</a></li>
+                <div class="col-lg-3">
+                    <h6 class="text-white mb-3">项目能力</h6>
+                    <ul class="list-unstyled small text-secondary mb-0">
+                        <li class="mb-2">球队赛季画像与能力雷达图</li>
+                        <li class="mb-2">胜负概率与预测分差联动展示</li>
+                        <li>历史回测精度与特征重要性分析</li>
                     </ul>
                 </div>
-                <div class="col-md-4">
-                    <h6 class="text-white mb-3">关注我们</h6>
-                    <div class="d-flex gap-3">
-                        <a href="#" class="text-secondary fs-5"><i class="fab fa-github"></i></a>
-                        <a href="#" class="text-secondary fs-5"><i class="fab fa-twitter"></i></a>
-                        <a href="#" class="text-secondary fs-5"><i class="fab fa-weibo"></i></a>
-                    </div>
-                    <p class="text-secondary small mt-3 mb-0">
-                        系统版本: 1.0.0 | 最后更新: 2025
-                    </p>
+                <div class="col-lg-3">
+                    <h6 class="text-white mb-3">当前说明</h6>
+                    <p class="text-secondary small mb-2">当前页面优先使用本地数据库；若数据库为空，会自动回退到 `output/` 中的缓存特征文件。</p>
+                    <p class="text-secondary small mb-0">适合课程展示、项目答辩和快速 Demo 演示。</p>
                 </div>
             </div>
             <hr class="my-4" style="border-color: rgba(255,255,255,0.1);">
             <p class="text-center text-secondary small mb-0">
-                &copy; 2025 NBA比赛预测系统. 基于数据驱动的智能预测.
+                &copy; 2026 NBA Prediction Project
             </p>
         </div>
     </footer>
 
-    <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- jQuery (可选，用于简化DOM操作) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-    <!-- 自定义脚本 -->
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-    
-    <!-- 动态加载球队菜单 -->
     <script>
-        // 页面加载后获取球队列表
-        document.addEventListener('DOMContentLoaded', async function() {
-            try {
-                const response = await fetch('/api/teams');
-                const data = await response.json();
-                if (data.success && data.data) {
-                    const teamsMenu = document.getElementById('teams-menu');
-                    // 保留前3项(所有球队和分隔线)
-                    const headerItems = teamsMenu.querySelectorAll('li:not(:nth-child(n+4))');
-                    // 添加前10支球队
-                    data.data.slice(0, 10).forEach(team => {
-                        const li = document.createElement('li');
-                        li.innerHTML = `<a class="dropdown-item" href="/team/${team.abbr}">
-                            <span class="me-2" style="font-weight:bold;color:#1D428A;">${team.abbr}</span>
-                            ${team.name}
-                        </a>`;
-                        teamsMenu.appendChild(li);
-                    });
-                    // 添加查看更多
-                    const moreLi = document.createElement('li');
-                    moreLi.innerHTML = `<a class="dropdown-item" href="{{ url_for('pages.data_page') }}#teams">
-                        <i class="fas fa-ellipsis-h me-2"></i>查看更多...
-                    </a>`;
-                    teamsMenu.appendChild(moreLi);
-                }
-            } catch (error) {
-                console.error('加载球队列表失败:', error);
-            }
-        });
+    document.addEventListener('DOMContentLoaded', async () => {
+        const menu = document.getElementById('teams-menu');
+        if (!menu || typeof api === 'undefined') {
+            return;
+        }
+
+        try {
+            const response = await api.getTeams();
+            const teams = (response.data || []).slice(0, 10);
+
+            teams.forEach(team => {
+                const item = document.createElement('li');
+                item.innerHTML = `
+                    <a class="dropdown-item" href="/team/${team.abbr}">
+                        <span class="me-2 fw-bold text-nba-blue">${team.abbr}</span>${team.name}
+                    </a>
+                `;
+                menu.appendChild(item);
+            });
+
+            const more = document.createElement('li');
+            more.innerHTML = `
+                <a class="dropdown-item" href="{{ url_for('pages.data_page') }}#teams">
+                    <i class="fas fa-ellipsis me-2"></i>查看更多球队
+                </a>
+            `;
+            menu.appendChild(more);
+        } catch (error) {
+            console.error('Failed to load team menu:', error);
+        }
+    });
     </script>
-    
     {% block extra_js %}{% endblock %}
 </body>
 </html>

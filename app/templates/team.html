@@ -1,34 +1,29 @@
 {% extends "base.html" %}
 
-{% block title %}{{ team_abbr }} - 球队详情 - NBA比赛预测系统{% endblock %}
+{% block title %}{{ team_abbr }} - 球队详情{% endblock %}
 
 {% block content %}
-<!-- 页面加载状态 -->
 <div id="loading-state" class="container py-5 text-center">
     <div class="spinner mx-auto mb-3"></div>
-    <p class="text-secondary">加载球队数据...</p>
+    <p class="text-secondary">正在加载球队详情...</p>
 </div>
 
-<!-- 球队详情内容 -->
-<div id="team-content" style="display: none;">
-    <!-- 球队头部信息 -->
-    <section class="team-header py-4" style="background: linear-gradient(135deg, rgba(29, 66, 138, 0.3) 0%, rgba(245, 132, 38, 0.1) 100%);">
+<div id="team-content" style="display:none;">
+    <section class="team-header py-4" style="background: linear-gradient(135deg, rgba(29, 66, 138, 0.35) 0%, rgba(245, 132, 38, 0.12) 100%);">
         <div class="container">
-            <div class="row align-items-center">
-                <div class="col-md-3 text-center text-md-start mb-4 mb-md-0">
-                    <div class="team-logo-lg mx-auto mx-md-0" id="team-logo">
-                        <!-- 动态 -->
-                    </div>
+            <div class="row align-items-center g-4">
+                <div class="col-md-3 text-center text-md-start">
+                    <div class="team-logo-xl mx-auto mx-md-0" id="team-logo">{{ team_abbr }}</div>
                 </div>
                 <div class="col-md-6 text-center text-md-start">
-                    <div class="d-flex align-items-center justify-content-center justify-content-md-start gap-2 mb-2">
-                        <span class="badge badge-nba" id="team-conference">东部</span>
-                        <span class="badge badge-orange" id="team-division">分区</span>
+                    <div class="d-flex flex-wrap gap-2 justify-content-center justify-content-md-start mb-3">
+                        <span class="badge badge-nba" id="team-conference">--</span>
+                        <span class="badge badge-orange" id="team-division">--</span>
                     </div>
                     <h1 class="display-5 fw-bold mb-2" id="team-name">--</h1>
                     <p class="text-secondary mb-0" id="team-city">--</p>
                 </div>
-                <div class="col-md-3 text-center text-md-end mt-4 mt-md-0">
+                <div class="col-md-3 text-center text-md-end">
                     <div class="stats-card d-inline-block">
                         <div class="stats-number" id="team-win-pct">--</div>
                         <div class="stats-label">赛季胜率</div>
@@ -43,66 +38,59 @@
         </div>
     </section>
 
-    <!-- 快速操作 -->
     <section class="py-3">
         <div class="container">
             <div class="d-flex flex-wrap gap-2 justify-content-center">
                 <a href="/predict?home={{ team_abbr }}" class="btn btn-primary">
-                    <i class="fas fa-home me-2"></i>作为主队预测
+                    <i class="fas fa-house me-2"></i>作为主队预测
                 </a>
                 <a href="/predict?away={{ team_abbr }}" class="btn btn-outline-primary">
                     <i class="fas fa-plane me-2"></i>作为客队预测
                 </a>
                 <button class="btn btn-secondary" onclick="window.history.back()">
-                    <i class="fas fa-arrow-left me-2"></i>返回
+                    <i class="fas fa-arrow-left me-2"></i>返回上一页
                 </button>
             </div>
         </div>
     </section>
 
-    <!-- 球队风格标签 -->
     <section class="py-4" id="team-style">
         <div class="container">
             <div class="card">
                 <div class="card-header">
                     <i class="fas fa-tags me-2"></i>球队风格标签
                 </div>
-                <div class="card-body" id="style-tags">
-                    <!-- 动态加载 -->
-                </div>
+                <div class="card-body" id="style-tags"></div>
             </div>
         </div>
     </section>
 
-    <!-- 赛季统计图表 -->
     <section class="py-4">
         <div class="container">
             <h2 class="text-white mb-4">
-                <i class="fas fa-chart-line me-2 text-nba-orange"></i>赛季数据
+                <i class="fas fa-chart-line me-2 text-nba-orange"></i>赛季核心图表
             </h2>
-            
             <div class="row g-4">
                 <div class="col-lg-6">
                     <div class="chart-container">
                         <div class="chart-title">
-                            <i class="fas fa-basketball me-2 text-nba-orange"></i>场均数据
+                            <i class="fas fa-basketball me-2 text-nba-orange"></i>场均数据概览
                         </div>
-                        <div id="avg-stats-chart" style="height: 300px;"></div>
+                        <div id="avg-stats-chart" style="height: 320px;"></div>
                     </div>
                 </div>
                 <div class="col-lg-6">
                     <div class="chart-container">
                         <div class="chart-title">
-                            <i class="fas fa-fire me-2 text-nba-orange"></i>进攻/防守效率
+                            <i class="fas fa-fire me-2 text-nba-orange"></i>效率与节奏
                         </div>
-                        <div id="efficiency-chart" style="height: 300px;"></div>
+                        <div id="efficiency-chart" style="height: 320px;"></div>
                     </div>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- 详细统计数据 -->
     <section class="py-4">
         <div class="container">
             <div class="card">
@@ -112,32 +100,26 @@
                 <div class="card-body p-0">
                     <div class="table-responsive">
                         <table class="table table-hover mb-0">
-                            <tbody id="stats-table">
-                                <!-- 动态加载 -->
-                            </table>
+                            <tbody id="stats-table"></tbody>
+                        </table>
                     </div>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- 近期比赛 -->
     <section class="py-4" id="recent-games">
         <div class="container">
-            <div class="d-flex justify-content-between align-items-center mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
                 <h2 class="text-white mb-0">
                     <i class="fas fa-history me-2 text-nba-orange"></i>近期比赛
                 </h2>
-                <div class="text-secondary small" id="games-range">最近10场</div>
+                <div class="text-secondary small" id="games-range">最近 0 场</div>
             </div>
-            
-            <div class="row g-3" id="recent-games-list">
-                <!-- 动态加载 -->
-            </div>
+            <div class="row g-3" id="recent-games-list"></div>
         </div>
     </section>
 
-    <!-- 雷达图对比 -->
     <section class="py-4">
         <div class="container">
             <div class="card">
@@ -151,20 +133,18 @@
         </div>
     </section>
 
-    <!-- 与其他球队对比 -->
     <section class="py-4">
         <div class="container">
             <h2 class="text-white mb-4">
-                <i class="fas fa-balance-scale me-2 text-nba-orange"></i>与其他球队对比
+                <i class="fas fa-scale-balanced me-2 text-nba-orange"></i>球队对比
             </h2>
-            
             <div class="card mb-4">
                 <div class="card-body">
-                    <div class="row g-3 align-items-center">
+                    <div class="row g-3 align-items-end">
                         <div class="col-md-4">
                             <label class="form-label">选择对比球队</label>
                             <select class="form-select" id="compare-team">
-                                <option value="">-- 选择球队 --</option>
+                                <option value="">-- 请选择球队 --</option>
                             </select>
                         </div>
                         <div class="col-md-4">
@@ -174,21 +154,20 @@
                                 <option value="avg_points">场均得分</option>
                                 <option value="avg_assists">场均助攻</option>
                                 <option value="avg_rebounds">场均篮板</option>
+                                <option value="net_rating">净效率</option>
                             </select>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">&nbsp;</label>
                             <button class="btn btn-primary w-100" onclick="compareTeams()">
-                                <i class="fas fa-search me-2"></i>对比
+                                <i class="fas fa-chart-column me-2"></i>生成对比图
                             </button>
                         </div>
                     </div>
                 </div>
             </div>
-            
             <div class="card">
                 <div class="card-body">
-                    <div id="compare-chart" style="height: 300px;"></div>
+                    <div id="compare-chart" style="height: 320px;"></div>
                 </div>
             </div>
         </div>
@@ -200,212 +179,157 @@
 <script>
 const TEAM_ABBR = '{{ team_abbr }}';
 let currentTeam = null;
-let allTeams = [];
+let compareTeamsPool = [];
 
-// 页面加载
-document.addEventListener('DOMContentLoaded', async function() {
-    // 更新页面标题
-    document.title = `${TEAM_ABBR} - 球队详情 - NBA比赛预测系统`;
-    
-    // 加载数据
-    await loadTeamData();
-    
-    // 加载所有球队（用于对比）
-    await loadAllTeams();
-    
-    // 初始化图表
-    initRadarChart();
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadTeamPage();
 });
 
-// 加载球队数据
-async function loadTeamData() {
+async function loadTeamPage() {
     try {
         const response = await api.getTeamDetail(TEAM_ABBR);
-        if (response.success) {
-            currentTeam = response.data;
-            renderTeamInfo();
-            renderStats();
-            renderRecentGames();
-            updateCharts();
-            
-            // 隐藏加载状态，显示内容
-            document.getElementById('loading-state').style.display = 'none';
-            document.getElementById('team-content').style.display = 'block';
-        }
+        currentTeam = response.data;
+
+        renderTeamInfo();
+        renderStyleTags();
+        renderStatsTable();
+        renderRecentGames();
+        renderCharts();
+        await loadCompareTeams(currentTeam.season);
+
+        document.getElementById('loading-state').style.display = 'none';
+        document.getElementById('team-content').style.display = 'block';
     } catch (error) {
-        console.error('加载球队数据失败:', error);
+        console.error('Failed to load team detail:', error);
         document.getElementById('loading-state').innerHTML = `
             <div class="alert-danger-custom py-4">
-                <i class="fas fa-exclamation-circle me-2"></i>
-                加载失败：${error.message}
-                <br><br>
-                <a href="/" class="btn btn-primary">返回首页</a>
+                <i class="fas fa-exclamation-circle me-2"></i>${error.message || '球队数据加载失败'}
+                <div class="mt-3">
+                    <a href="/" class="btn btn-primary">返回首页</a>
+                </div>
             </div>
         `;
     }
 }
 
-// 渲染球队基本信息
 function renderTeamInfo() {
     const info = currentTeam.info || {};
     const stats = currentTeam.stats || {};
-    
-    // 球队Logo
-    document.getElementById('team-logo').innerHTML = `
-        <div class="team-logo-xl">${TEAM_ABBR}</div>
-    `;
-    
-    // 基本信息
-    document.getElementById('team-name').textContent = info.name || info.full_name || TEAM_ABBR;
-    document.getElementById('team-city').textContent = info.city || info.arena || 'NBA';
-    
-    // 联盟和分区
-    const conference = info.conference || (['ATL', 'BOS', 'BRK', 'CHI', 'CHO', 'CLE', 'DET', 'IND', 'MIA', 'MIL', 'NYK', 'ORL', 'PHI', 'TOR', 'WAS'].includes(TEAM_ABBR) ? '东部' : '西部');
-    const division = info.division || '未知分区';
-    document.getElementById('team-conference').textContent = conference;
-    document.getElementById('team-division').textContent = division;
-    
-    // 战绩
-    const wins = stats.wins || info.wins || 0;
-    const losses = stats.losses || info.losses || 0;
-    const winPct = stats.win_pct || info.win_pct || 0.5;
-    
-    document.getElementById('team-wins').textContent = wins;
-    document.getElementById('team-losses').textContent = losses;
-    document.getElementById('team-win-pct').textContent = (winPct * 100).toFixed(1) + '%';
-    
-    // 球队风格标签
-    renderStyleTags(info, stats);
+
+    document.getElementById('team-logo').textContent = TEAM_ABBR;
+    document.getElementById('team-name').textContent = info.name || TEAM_ABBR;
+    document.getElementById('team-city').textContent = info.city || '--';
+    document.getElementById('team-conference').textContent = info.conference === 'Eastern' ? '东部' : info.conference === 'Western' ? '西部' : (info.conference || '--');
+    document.getElementById('team-division').textContent = info.division || '--';
+    document.getElementById('team-wins').textContent = stats.wins || 0;
+    document.getElementById('team-losses').textContent = stats.losses || 0;
+    document.getElementById('team-win-pct').textContent = Utils.formatPercent(stats.win_pct || 0);
 }
 
-// 渲染球队风格标签
-function renderStyleTags(info, stats) {
+function renderStyleTags() {
+    const info = currentTeam.info || {};
+    const stats = currentTeam.stats || {};
     const tags = [];
-    
-    // 根据数据推断风格
-    const avgPoints = stats.avg_points || 110;
-    const avgRebounds = stats.avg_rebounds || 45;
-    const avgAssists = stats.avg_assists || 25;
-    const pace = stats.pace || 100;
-    
-    if (avgPoints > 115) {
-        tags.push({ name: '进攻强队', class: 'style-offensive', icon: 'fa-fire' });
-    } else if (avgPoints < 108) {
-        tags.push({ name: '防守强队', class: 'style-defensive', icon: 'fa-shield-alt' });
+
+    if (info.style) {
+        tags.push({ label: info.style, className: 'style-balanced', icon: 'fa-tags' });
     }
-    
-    if (pace > 102) {
-        tags.push({ name: '快节奏', class: 'style-fast', icon: 'fa-bolt' });
-    } else if (pace < 98) {
-        tags.push({ name: '慢节奏', class: 'style-defensive', icon: 'fa-turtle' });
+    if ((stats.offensive_rating || 0) >= 115) {
+        tags.push({ label: '高效进攻', className: 'style-offensive', icon: 'fa-fire' });
     }
-    
-    if (avgAssists > 27) {
-        tags.push({ name: '团队篮球', class: 'style-balanced', icon: 'fa-users' });
+    if ((stats.defensive_rating || 999) <= 111) {
+        tags.push({ label: '防守韧性', className: 'style-defensive', icon: 'fa-shield-halved' });
     }
-    
-    if (avgRebounds > 48) {
-        tags.push({ name: '篮板强队', class: 'style-offensive', icon: 'fa-basketball' });
+    if ((stats.pace || 0) >= 100) {
+        tags.push({ label: '快节奏', className: 'style-fast', icon: 'fa-bolt' });
     }
-    
-    // 添加球队类型标签
-    tags.push({ name: 'NBA球队', class: 'badge-nba', icon: 'fa-basketball' });
-    
+    if ((stats.avg_assists || 0) >= 27) {
+        tags.push({ label: '分享球', className: 'style-balanced', icon: 'fa-users' });
+    }
+    if ((stats.avg_rebounds || 0) >= 46) {
+        tags.push({ label: '篮板优势', className: 'style-offensive', icon: 'fa-basketball' });
+    }
+    if (!tags.length) {
+        tags.push({ label: '稳定型球队', className: 'style-balanced', icon: 'fa-circle' });
+    }
+
     document.getElementById('style-tags').innerHTML = tags.map(tag => `
-        <span class="team-style-tag ${tag.class}">
-            <i class="fas ${tag.icon} me-1"></i>${tag.name}
+        <span class="team-style-tag ${tag.className}">
+            <i class="fas ${tag.icon} me-1"></i>${tag.label}
         </span>
     `).join('');
 }
 
-// 渲染统计数据表格
-function renderStats() {
+function renderStatsTable() {
     const stats = currentTeam.stats || {};
-    
-    const statRows = [
-        { label: '场均得分', value: stats.avg_points || '--', icon: 'fa-basketball' },
-        { label: '场均失分', value: stats.avg_points_allowed || '--', icon: 'fa-shield-alt' },
-        { label: '场均篮板', value: stats.avg_rebounds || '--', icon: 'fa-circle' },
-        { label: '场均助攻', value: stats.avg_assists || '--', icon: 'fa-hands-helping' },
-        { label: '场均抢断', value: stats.avg_steals || '--', icon: 'fa-hand-paper' },
-        { label: '场均盖帽', value: stats.avg_blocks || '--', icon: 'fa-arrow-up' },
-        { label: '投篮命中率', value: stats.fg_pct ? (stats.fg_pct * 100).toFixed(1) + '%' : '--', icon: 'fa-bullseye' },
-        { label: '三分命中率', value: stats.fg3_pct ? (stats.fg3_pct * 100).toFixed(1) + '%' : '--', icon: 'fa-basketball' },
-        { label: '罚球命中率', value: stats.ft_pct ? (stats.ft_pct * 100).toFixed(1) + '%' : '--', icon: 'fa-circle-notch' },
-        { label: '进攻效率', value: stats.off_rtg || '--', icon: 'fa-arrow-up' },
-        { label: '防守效率', value: stats.def_rtg || '--', icon: 'fa-arrow-down' },
-        { label: '净效率', value: stats.net_rtg || '--', icon: 'fa-balance-scale' },
+    const rows = [
+        ['场均得分', stats.avg_points, 'fa-basketball'],
+        ['场均失分', stats.avg_points_allowed, 'fa-shield-halved'],
+        ['场均篮板', stats.avg_rebounds, 'fa-arrows-up-down'],
+        ['场均助攻', stats.avg_assists, 'fa-hands-helping'],
+        ['场均抢断', stats.avg_steals, 'fa-hand'],
+        ['场均盖帽', stats.avg_blocks, 'fa-arrow-up'],
+        ['投篮命中率', Utils.formatPercent(stats.avg_fg_pct || 0), 'fa-bullseye'],
+        ['三分命中率', Utils.formatPercent(stats.avg_fg3_pct || 0), 'fa-crosshairs'],
+        ['罚球命中率', Utils.formatPercent(stats.avg_ft_pct || 0), 'fa-circle-dot'],
+        ['进攻效率', (stats.offensive_rating || 0).toFixed(1), 'fa-arrow-trend-up'],
+        ['防守效率', (stats.defensive_rating || 0).toFixed(1), 'fa-arrow-trend-down'],
+        ['净效率', (stats.net_rating || 0).toFixed(1), 'fa-scale-balanced'],
+        ['近期 5 场胜率', Utils.formatPercent(stats.recent_5_win_pct || 0), 'fa-chart-line'],
+        ['主场胜率', Utils.formatPercent(stats.home_win_pct || 0), 'fa-house'],
+        ['客场胜率', Utils.formatPercent(stats.away_win_pct || 0), 'fa-plane'],
+        ['节奏 Pace', (stats.pace || 0).toFixed(1), 'fa-gauge-high']
     ];
-    
-    document.getElementById('stats-table').innerHTML = statRows.map((stat, index) => `
+
+    document.getElementById('stats-table').innerHTML = rows.map(([label, value, icon]) => `
         <tr>
-            <td class="text-start" style="width: 40%;">
-                <i class="fas ${stat.icon} me-2 text-nba-orange"></i>${stat.label}
+            <td style="width:45%;">
+                <i class="fas ${icon} me-2 text-nba-orange"></i>${label}
             </td>
-            <td class="text-end fw-bold" style="width: 30%;">
-                <span class="text-nba-blue">${stat.value}</span>
-            </td>
-            <td class="text-end" style="width: 30%;">
-                <div class="progress mb-0" style="height: 6px;">
-                    <div class="progress-bar" style="width: ${parseFloat(stat.value) || 50}%; background: #F58426;"></div>
-                </div>
-            </td>
+            <td class="text-end fw-bold text-nba-blue">${value ?? '--'}</td>
         </tr>
     `).join('');
 }
 
-// 渲染近期比赛
 function renderRecentGames() {
     const games = currentTeam.recent_games || [];
     const container = document.getElementById('recent-games-list');
-    
-    if (games.length === 0) {
+    document.getElementById('games-range').textContent = `最近 ${games.length} 场`;
+
+    if (!games.length) {
         container.innerHTML = `
             <div class="col-12">
                 <div class="alert-nba text-center py-4">
-                    <i class="fas fa-calendar-times me-2"></i>
-                    暂无比赛记录
+                    <i class="fas fa-calendar-xmark me-2"></i>暂无近期比赛记录
                 </div>
             </div>
         `;
         return;
     }
-    
-    document.getElementById('games-range').textContent = `最近${games.length}场`;
-    
+
     container.innerHTML = games.map(game => {
         const isWin = game.result === 'W';
-        const isHome = game.home_team === TEAM_ABBR;
-        
+        const locationLabel = game.is_home ? '主场' : '客场';
         return `
-            <div class="col-md-6 col-lg-4">
-                <div class="card ${isWin ? 'border-success' : 'border-danger'}" 
-                     style="border-width: 2px;">
+            <div class="col-md-6 col-xl-4">
+                <div class="card h-100 ${isWin ? 'border-success' : 'border-danger'}" style="border-width:2px;">
                     <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <span class="badge ${isHome ? 'badge-nba' : 'badge-orange'}">
-                                ${isHome ? '主' : '客'}
-                            </span>
-                            <span class="badge ${isWin ? 'badge-success' : 'badge-danger'}">
-                                ${isWin ? '胜' : '负'}
-                            </span>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <span class="badge ${game.is_home ? 'badge-nba' : 'badge-orange'}">${locationLabel}</span>
+                            <span class="badge ${isWin ? 'badge-success' : 'badge-danger'}">${isWin ? '胜' : '负'}</span>
                         </div>
-                        <div class="text-center my-3">
-                            <div class="d-flex justify-content-center align-items-center gap-3">
-                                <div>
-                                    <div class="fw-bold">${game.home_team}</div>
-                                    <div class="h4 mb-0 text-nba-blue">${game.points || '--'}</div>
-                                </div>
-                                <div class="text-secondary">:</div>
-                                <div>
-                                    <div class="fw-bold">${game.away_team}</div>
-                                    <div class="h4 mb-0 text-nba-orange">${game.opponent_points || '--'}</div>
-                                </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="text-center">
+                                <div class="fw-bold">${game.home_team}</div>
+                                <div class="h4 mb-0 text-nba-blue">${game.home_points ?? '--'}</div>
+                            </div>
+                            <div class="text-secondary fs-5">:</div>
+                            <div class="text-center">
+                                <div class="fw-bold">${game.away_team}</div>
+                                <div class="h4 mb-0 text-nba-orange">${game.away_points ?? '--'}</div>
                             </div>
                         </div>
-                        <div class="text-center text-secondary small">
-                            ${game.game_date || ''}
-                        </div>
+                        <div class="text-center text-secondary small mt-3">${game.game_date || '--'}</div>
                     </div>
                 </div>
             </div>
@@ -413,65 +337,11 @@ function renderRecentGames() {
     }).join('');
 }
 
-// 初始化雷达图
-function initRadarChart() {
-    const radarChart = echarts.init(document.getElementById('radar-chart'));
-    
-    // 默认数据
-    const defaultData = {
-        indicators: [
-            { name: '得分', max: 120 },
-            { name: '篮板', max: 50 },
-            { name: '助攻', max: 30 },
-            { name: '防守', max: 100 },
-            { name: '速度', max: 100 },
-            { name: '深度', max: 100 }
-        ],
-        teams: [
-            {
-                name: TEAM_ABBR,
-                value: [110, 45, 25, 108, 100, 85]
-            }
-        ]
-    };
-    
-    radarChart.setOption({
-        tooltip: { trigger: 'item' },
-        legend: {
-            bottom: 10,
-            textStyle: { color: '#a0a0a0' }
-        },
-        radar: {
-            indicator: defaultData.indicators,
-            splitArea: {
-                areaStyle: {
-                    color: ['rgba(29, 66, 138, 0.1)', 'rgba(29, 66, 138, 0.2)']
-                }
-            },
-            axisLine: { lineStyle: { color: '#333' } },
-            splitLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }
-        },
-        series: [{
-            type: 'radar',
-            data: defaultData.teams,
-            itemStyle: {
-                color: '#F58426',
-                borderWidth: 2
-            },
-            areaStyle: {
-                color: 'rgba(245, 132, 38, 0.2)'
-            }
-        }]
-    });
-}
-
-// 更新图表
-function updateCharts() {
+function renderCharts() {
     const stats = currentTeam.stats || {};
-    
-    // 场均数据柱状图
-    const avgStatsChart = echarts.init(document.getElementById('avg-stats-chart'));
-    avgStatsChart.setOption({
+
+    const avgChart = chartManager.register('avg-stats-chart', echarts.init(document.getElementById('avg-stats-chart')));
+    avgChart.setOption({
         tooltip: { trigger: 'axis' },
         grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
         xAxis: {
@@ -487,37 +357,33 @@ function updateCharts() {
         series: [{
             type: 'bar',
             data: [
-                stats.avg_points || 110,
-                stats.avg_rebounds || 45,
-                stats.avg_assists || 25,
-                stats.avg_steals || 8,
-                stats.avg_blocks || 5
+                Number((stats.avg_points || 0).toFixed(1)),
+                Number((stats.avg_rebounds || 0).toFixed(1)),
+                Number((stats.avg_assists || 0).toFixed(1)),
+                Number((stats.avg_steals || 0).toFixed(1)),
+                Number((stats.avg_blocks || 0).toFixed(1))
             ],
             itemStyle: {
                 color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
                     { offset: 0, color: '#F58426' },
                     { offset: 1, color: '#1D428A' }
                 ]),
-                borderRadius: [5, 5, 0, 0]
+                borderRadius: [6, 6, 0, 0]
             }
         }]
     });
-    
-    // 效率图
-    const efficiencyChart = echarts.init(document.getElementById('efficiency-chart'));
-    const offRtg = parseFloat(stats.off_rtg) || 110;
-    const defRtg = parseFloat(stats.def_rtg) || 110;
-    
+
+    const efficiencyChart = chartManager.register('efficiency-chart', echarts.init(document.getElementById('efficiency-chart')));
     efficiencyChart.setOption({
-        tooltip: {
-            trigger: 'axis',
-            axisPointer: { type: 'shadow' },
-            formatter: '{b}: {c}'
+        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+        legend: {
+            data: ['数值'],
+            textStyle: { color: '#a0a0a0' }
         },
         grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
         xAxis: {
             type: 'category',
-            data: ['进攻效率', '防守效率'],
+            data: ['进攻效率', '防守效率', '净效率', '节奏'],
             axisLabel: { color: '#a0a0a0' }
         },
         yAxis: {
@@ -528,62 +394,100 @@ function updateCharts() {
         series: [{
             type: 'bar',
             data: [
-                { value: offRtg, itemStyle: { color: '#28a745' } },
-                { value: defRtg, itemStyle: { color: '#dc3545' } }
+                { value: Number((stats.offensive_rating || 0).toFixed(1)), itemStyle: { color: '#28a745' } },
+                { value: Number((stats.defensive_rating || 0).toFixed(1)), itemStyle: { color: '#dc3545' } },
+                { value: Number((stats.net_rating || 0).toFixed(1)), itemStyle: { color: (stats.net_rating || 0) >= 0 ? '#17a2b8' : '#dc3545' } },
+                { value: Number((stats.pace || 0).toFixed(1)), itemStyle: { color: '#F58426' } }
             ],
-            barWidth: '50%',
-            itemStyle: { borderRadius: [5, 5, 0, 0] }
+            itemStyle: { borderRadius: [6, 6, 0, 0] }
         }]
     });
-    
-    // 响应式
-    window.addEventListener('resize', () => {
-        avgStatsChart.resize();
-        efficiencyChart.resize();
+
+    const radarChart = chartManager.register('radar-chart', echarts.init(document.getElementById('radar-chart')));
+    radarChart.setOption({
+        tooltip: { trigger: 'item' },
+        radar: {
+            indicator: [
+                { name: '得分', max: 130 },
+                { name: '篮板', max: 60 },
+                { name: '助攻', max: 35 },
+                { name: '近期状态', max: 1 },
+                { name: '净效率', max: 20 },
+                { name: '节奏', max: 110 }
+            ],
+            splitArea: {
+                areaStyle: { color: ['rgba(29,66,138,0.06)', 'rgba(29,66,138,0.14)'] }
+            },
+            axisLine: { lineStyle: { color: '#333' } },
+            splitLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }
+        },
+        series: [{
+            type: 'radar',
+            data: [{
+                name: TEAM_ABBR,
+                value: [
+                    Number((stats.avg_points || 0).toFixed(1)),
+                    Number((stats.avg_rebounds || 0).toFixed(1)),
+                    Number((stats.avg_assists || 0).toFixed(1)),
+                    Number((stats.recent_5_win_pct || 0).toFixed(2)),
+                    Number((stats.net_rating || 0).toFixed(1)),
+                    Number((stats.pace || 0).toFixed(1))
+                ]
+            }],
+            itemStyle: { color: '#F58426' },
+            areaStyle: { color: 'rgba(245,132,38,0.22)' }
+        }]
     });
 }
 
-// 加载所有球队
-async function loadAllTeams() {
+async function loadCompareTeams(season) {
     try {
-        const response = await api.getTeams();
-        if (response.success) {
-            allTeams = response.data.filter(t => t.abbr !== TEAM_ABBR);
-            const select = document.getElementById('compare-team');
-            select.innerHTML = '<option value="">-- 选择球队 --</option>' + 
-                allTeams.map(t => `<option value="${t.abbr}">${t.abbr} - ${t.name}</option>`).join('');
-        }
+        const response = await api.getTeams(season ? { season } : {});
+        compareTeamsPool = (response.data || []).filter(team => team.abbr !== TEAM_ABBR);
+        document.getElementById('compare-team').innerHTML = `
+            <option value="">-- 请选择球队 --</option>
+            ${compareTeamsPool.map(team => `<option value="${team.abbr}">${team.abbr} - ${team.name}</option>`).join('')}
+        `;
     } catch (error) {
-        console.error('加载球队列表失败:', error);
+        console.error('Failed to load compare teams:', error);
     }
 }
 
-// 对比球队
 function compareTeams() {
     const compareAbbr = document.getElementById('compare-team').value;
     const dimension = document.getElementById('compare-dimension').value;
-    
+
     if (!compareAbbr) {
-        Utils.showNotification('请选择对比球队', 'warning');
+        Utils.showNotification('请先选择要对比的球队', 'warning');
         return;
     }
-    
-    const compareTeam = allTeams.find(t => t.abbr === compareAbbr);
-    if (!compareTeam) return;
-    
-    const dimLabels = {
-        'win_pct': '胜率',
-        'avg_points': '场均得分',
-        'avg_assists': '场均助攻',
-        'avg_rebounds': '场均篮板'
+
+    const compareTeam = compareTeamsPool.find(team => team.abbr === compareAbbr);
+    if (!compareTeam) {
+        return;
+    }
+
+    const stats = currentTeam.stats || {};
+    const dimensionMeta = {
+        win_pct: { label: '胜率', teamValue: stats.win_pct || 0, compareValue: compareTeam.win_pct || 0, percent: true },
+        avg_points: { label: '场均得分', teamValue: stats.avg_points || 0, compareValue: compareTeam.avg_points || 0, percent: false },
+        avg_assists: { label: '场均助攻', teamValue: stats.avg_assists || 0, compareValue: compareTeam.avg_assists || 0, percent: false },
+        avg_rebounds: { label: '场均篮板', teamValue: stats.avg_rebounds || 0, compareValue: compareTeam.avg_rebounds || 0, percent: false },
+        net_rating: { label: '净效率', teamValue: stats.net_rating || 0, compareValue: compareTeam.net_rating || 0, percent: false }
     };
-    
-    const team1Value = (currentTeam.stats && currentTeam.stats[dimension]) || 50;
-    const team2Value = (compareTeam[dimension] || 0.5) * (dimension === 'win_pct' ? 100 : 1);
-    
-    const compareChart = echarts.init(document.getElementById('compare-chart'));
-    compareChart.setOption({
-        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+
+    const selected = dimensionMeta[dimension];
+    const chart = chartManager.register('compare-chart', echarts.init(document.getElementById('compare-chart')));
+
+    chart.setOption({
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'shadow' },
+            formatter: params => params.map(item => {
+                const value = selected.percent ? `${(item.value * 100).toFixed(1)}%` : item.value;
+                return `${item.seriesName}: ${value}`;
+            }).join('<br/>')
+        },
         legend: {
             data: [TEAM_ABBR, compareAbbr],
             textStyle: { color: '#a0a0a0' }
@@ -591,31 +495,32 @@ function compareTeams() {
         grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
         xAxis: {
             type: 'category',
-            data: [dimLabels[dimension]],
+            data: [selected.label],
             axisLabel: { color: '#a0a0a0' }
         },
         yAxis: {
             type: 'value',
-            axisLabel: { color: '#a0a0a0' },
+            axisLabel: {
+                color: '#a0a0a0',
+                formatter: value => selected.percent ? `${(value * 100).toFixed(0)}%` : value
+            },
             splitLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }
         },
         series: [
             {
                 name: TEAM_ABBR,
                 type: 'bar',
-                data: [dimension === 'win_pct' ? (team1Value * 100).toFixed(1) : team1Value.toFixed(1)],
-                itemStyle: { color: '#1D428A' }
+                data: [Number(selected.teamValue.toFixed ? selected.teamValue.toFixed(3) : selected.teamValue)],
+                itemStyle: { color: '#1D428A', borderRadius: [6, 6, 0, 0] }
             },
             {
                 name: compareAbbr,
                 type: 'bar',
-                data: [dimension === 'win_pct' ? (team2Value * 100).toFixed(1) : team2Value.toFixed(1)],
-                itemStyle: { color: '#F58426' }
+                data: [Number(selected.compareValue.toFixed ? selected.compareValue.toFixed(3) : selected.compareValue)],
+                itemStyle: { color: '#F58426', borderRadius: [6, 6, 0, 0] }
             }
         ]
     });
-    
-    compareChart.resize();
 }
 </script>
 

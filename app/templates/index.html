@@ -1,33 +1,28 @@
 {% extends "base.html" %}
 
-{% block title %}首页 - NBA比赛预测系统{% endblock %}
+{% block title %}首页 - NBA 比赛预测系统{% endblock %}
 
 {% block content %}
-<!-- Hero区域 -->
 <section class="hero-section">
     <div class="container">
         <div class="hero-badge">
-            <i class="fas fa-bolt me-2"></i>智能预测系统
+            <i class="fas fa-bolt me-2"></i>可解释的比赛预测与数据分析
         </div>
-        <h1 class="hero-title">
-            NBA比赛预测系统
-        </h1>
+        <h1 class="hero-title">NBA 比赛预测系统</h1>
         <p class="hero-subtitle">
-            基于机器学习算法，结合历史数据和球队表现，<br>
-            为您提供精准的NBA比赛结果预测
+            基于球队赛季特征、近期状态与风格聚类，输出胜负概率、预测分差、关键因素和可视化结果。
         </p>
         <div class="d-flex justify-content-center gap-3 flex-wrap">
             <a href="{{ url_for('pages.predict_page') }}" class="btn btn-primary btn-lg">
                 <i class="fas fa-chart-line me-2"></i>开始预测
             </a>
             <a href="{{ url_for('pages.data_page') }}" class="btn btn-outline-primary btn-lg">
-                <i class="fas fa-database me-2"></i>查看数据
+                <i class="fas fa-database me-2"></i>查看数据中心
             </a>
         </div>
     </div>
 </section>
 
-<!-- 统计概览 -->
 <section class="py-5">
     <div class="container">
         <div class="row g-4">
@@ -40,167 +35,84 @@
             </div>
             <div class="col-6 col-lg-3">
                 <div class="stats-card">
-                    <div class="stats-icon"><i class="fas fa-check-circle"></i></div>
+                    <div class="stats-icon"><i class="fas fa-bullseye"></i></div>
                     <div class="stats-number" id="model-accuracy">--</div>
-                    <div class="stats-label">预测准确率</div>
+                    <div class="stats-label">回测精度</div>
                 </div>
             </div>
             <div class="col-6 col-lg-3">
                 <div class="stats-card">
-                    <div class="stats-icon"><i class="fas fa-list-ol"></i></div>
+                    <div class="stats-icon"><i class="fas fa-clock-rotate-left"></i></div>
                     <div class="stats-number" id="total-predictions">--</div>
-                    <div class="stats-label">总预测数</div>
+                    <div class="stats-label">历史预测数</div>
                 </div>
             </div>
             <div class="col-6 col-lg-3">
                 <div class="stats-card">
-                    <div class="stats-icon"><i class="fas fa-users"></i></div>
-                    <div class="stats-number">30</div>
-                    <div class="stats-label">参赛球队</div>
+                    <div class="stats-icon"><i class="fas fa-layer-group"></i></div>
+                    <div class="stats-number" id="season-count">--</div>
+                    <div class="stats-label">可用赛季</div>
                 </div>
             </div>
         </div>
     </div>
 </section>
 
-<!-- 功能特性 -->
-<section class="py-5">
-    <div class="container">
-        <div class="text-center mb-5">
-            <h2 class="text-white mb-3">系统功能</h2>
-            <p class="text-secondary">强大的数据分析与预测能力</p>
-        </div>
-        <div class="row g-4">
-            <div class="col-md-6 col-lg-3">
-                <div class="card h-100">
-                    <div class="card-body text-center">
-                        <div class="feature-icon mb-3">
-                            <i class="fas fa-brain"></i>
-                        </div>
-                        <h5 class="card-title">智能预测</h5>
-                        <p class="card-text text-secondary small">
-                            基于机器学习算法，综合分析球队历史表现、近期状态、主场优势等多维因素
-                        </p>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6 col-lg-3">
-                <div class="card h-100">
-                    <div class="card-body text-center">
-                        <div class="feature-icon mb-3">
-                            <i class="fas fa-sliders-h"></i>
-                        </div>
-                        <h5 class="card-title">参数调节</h5>
-                        <p class="card-text text-secondary small">
-                            支持自定义伤病情况、休息天数、权重配置等参数，进行高级预测分析
-                        </p>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6 col-lg-3">
-                <div class="card h-100">
-                    <div class="card-body text-center">
-                        <div class="feature-icon mb-3">
-                            <i class="fas fa-chart-pie"></i>
-                        </div>
-                        <h5 class="card-title">数据可视化</h5>
-                        <p class="card-text text-secondary small">
-                            丰富的图表展示，包括雷达图、柱状图、折线图等，直观呈现分析结果
-                        </p>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6 col-lg-3">
-                <div class="card h-100">
-                    <div class="card-body text-center">
-                        <div class="feature-icon mb-3">
-                            <i class="fas fa-history"></i>
-                        </div>
-                        <h5 class="card-title">历史追踪</h5>
-                        <p class="card-text text-secondary small">
-                            记录预测历史，分析预测准确率，持续优化预测模型
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
-
-<!-- 今日比赛 -->
 <section class="py-5" id="today-section">
     <div class="container">
-        <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
             <div>
                 <h2 class="text-white mb-1">今日比赛</h2>
                 <p class="text-secondary small mb-0" id="today-date"></p>
             </div>
             <a href="{{ url_for('pages.predict_page') }}" class="btn btn-primary">
-                <i class="fas fa-plus me-2"></i>预测比赛
+                <i class="fas fa-plus me-2"></i>创建预测
             </a>
         </div>
-        
-        <div class="row" id="games-container">
-            <!-- 动态加载比赛卡片 -->
-            <div class="col-12">
-                <div class="text-center py-5">
-                    <div class="spinner"></div>
-                    <p class="text-secondary mt-3">加载中...</p>
-                </div>
-            </div>
-        </div>
+        <div class="row" id="games-container"></div>
     </div>
 </section>
 
-<!-- 近期预测 -->
 <section class="py-5" id="recent-section">
     <div class="container">
-        <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
             <div>
-                <h2 class="text-white mb-1">近期预测</h2>
-                <p class="text-secondary small mb-0">系统最新预测结果</p>
+                <h2 class="text-white mb-1">最近预测</h2>
+                <p class="text-secondary small mb-0">最近写入的比赛预测结果会直接显示在这里。</p>
             </div>
             <a href="{{ url_for('pages.data_page') }}#predictions" class="btn btn-outline-primary">
-                <i class="fas fa-history me-2"></i>查看更多
+                <i class="fas fa-history me-2"></i>查看完整历史
             </a>
         </div>
-        
-        <div class="row" id="predictions-container">
-            <!-- 动态加载预测卡片 -->
-        </div>
+        <div class="row" id="predictions-container"></div>
     </div>
 </section>
 
-<!-- 球队排名预览 -->
 <section class="py-5" id="teams-preview">
     <div class="container">
-        <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
             <div>
-                <h2 class="text-white mb-1">球队排名</h2>
-                <p class="text-secondary small mb-0">当前赛季胜率排名</p>
+                <h2 class="text-white mb-1">赛季球队排名</h2>
+                <p class="text-secondary small mb-0">使用当前赛季的真实球队特征和净效率排序。</p>
             </div>
             <a href="{{ url_for('pages.data_page') }}#ranking" class="btn btn-outline-primary">
-                <i class="fas fa-list-ol me-2"></i>完整排名
+                <i class="fas fa-list-ol me-2"></i>查看完整榜单
             </a>
         </div>
-        
         <div class="card">
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-hover mb-0">
                         <thead>
                             <tr>
-                                <th class="text-center" style="width: 60px;">排名</th>
+                                <th class="text-center" style="width: 70px;">排名</th>
                                 <th>球队</th>
-                                <th class="text-center">胜</th>
-                                <th class="text-center">负</th>
+                                <th class="text-center">战绩</th>
                                 <th class="text-center">胜率</th>
-                                <th class="text-center d-none d-lg-table-cell">走势</th>
+                                <th class="text-center d-none d-lg-table-cell">净效率</th>
                             </tr>
                         </thead>
-                        <tbody id="ranking-table">
-                            <!-- 动态加载 -->
-                        </tbody>
+                        <tbody id="ranking-table"></tbody>
                     </table>
                 </div>
             </div>
@@ -208,24 +120,23 @@
     </div>
 </section>
 
-<!-- 图表展示区 -->
 <section class="py-5">
     <div class="container">
         <div class="row g-4">
             <div class="col-lg-6">
                 <div class="chart-container">
                     <div class="chart-title">
-                        <i class="fas fa-chart-bar me-2 text-nba-orange"></i>东西部胜率对比
+                        <i class="fas fa-chart-bar me-2 text-nba-orange"></i>东西部平均胜率
                     </div>
-                    <div id="conference-chart" style="height: 300px;"></div>
+                    <div id="conference-chart" style="height: 320px;"></div>
                 </div>
             </div>
             <div class="col-lg-6">
                 <div class="chart-container">
                     <div class="chart-title">
-                        <i class="fas fa-chart-area me-2 text-nba-orange"></i>预测准确率趋势
+                        <i class="fas fa-chart-line me-2 text-nba-orange"></i>赛季回测走势
                     </div>
-                    <div id="accuracy-chart" style="height: 300px;"></div>
+                    <div id="accuracy-chart" style="height: 320px;"></div>
                 </div>
             </div>
         </div>
@@ -235,81 +146,72 @@
 
 {% block extra_js %}
 <script>
-document.addEventListener('DOMContentLoaded', async function() {
-    // 设置今日日期
-    const today = new Date();
-    document.getElementById('today-date').textContent = today.toLocaleDateString('zh-CN', {
+document.addEventListener('DOMContentLoaded', async () => {
+    document.getElementById('today-date').textContent = new Date().toLocaleDateString('zh-CN', {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
         weekday: 'long'
     });
 
-    // 加载首页数据
-    try {
-        const response = await api.getHomeData();
-        if (response.success) {
-            const data = response.data;
-            
-            // 更新统计
-            document.getElementById('today-games-count').textContent = data.today_games?.length || 0;
-            document.getElementById('model-accuracy').textContent = data.model_accuracy 
-                ? (data.model_accuracy * 100).toFixed(1) + '%' 
-                : '--';
-            document.getElementById('total-predictions').textContent = data.total_predictions || 0;
-            
-            // 渲染今日比赛
-            renderTodayGames(data.today_games || []);
-            
-            // 渲染近期预测
-            renderRecentPredictions(data.recent_predictions || []);
-        }
-    } catch (error) {
-        console.error('加载首页数据失败:', error);
-    }
-
-    // 加载球队排名
-    try {
-        const response = await api.getTeams();
-        if (response.success) {
-            renderRankingTable(response.data.slice(0, 10));
-        }
-    } catch (error) {
-        console.error('加载排名失败:', error);
-    }
-
-    // 初始化图表
-    initCharts();
+    await loadDashboard();
 });
 
-// 渲染今日比赛
+async function loadDashboard() {
+    try {
+        const [homeResponse, teamsResponse] = await Promise.all([
+            api.getHomeData(),
+            api.getTeams()
+        ]);
+
+        const homeData = homeResponse.data || {};
+        const teams = teamsResponse.data || [];
+
+        document.getElementById('today-games-count').textContent = (homeData.today_games || []).length;
+        document.getElementById('model-accuracy').textContent = homeData.model_accuracy
+            ? Utils.formatPercent(homeData.model_accuracy)
+            : '--';
+        document.getElementById('total-predictions').textContent = homeData.total_predictions || 0;
+        document.getElementById('season-count').textContent = (homeData.available_seasons || []).length;
+
+        renderTodayGames(homeData.today_games || []);
+        renderRecentPredictions(homeData.recent_predictions || []);
+        renderRankingTable((homeData.top_teams || teams).slice(0, 10));
+        renderConferenceChart(homeData.conference_summary || []);
+        renderAccuracyChart((homeData.diagnostics && homeData.diagnostics.season_breakdown) || []);
+    } catch (error) {
+        console.error('Failed to load dashboard:', error);
+        Utils.showNotification(error.message || '首页数据加载失败', 'error');
+        renderTodayGames([]);
+        renderRecentPredictions([]);
+        renderRankingTable([]);
+        renderConferenceChart([]);
+        renderAccuracyChart([]);
+    }
+}
+
 function renderTodayGames(games) {
     const container = document.getElementById('games-container');
-    
-    if (games.length === 0) {
+
+    if (!games.length) {
         container.innerHTML = `
             <div class="col-12">
                 <div class="alert-nba text-center py-5">
-                    <i class="fas fa-calendar-times fa-3x mb-3"></i>
-                    <p class="mb-0">今日暂无比赛安排</p>
+                    <i class="fas fa-calendar-xmark fa-3x mb-3"></i>
+                    <p class="mb-0">当前数据源中没有今日比赛记录。</p>
                 </div>
             </div>
         `;
         return;
     }
-    
+
     container.innerHTML = games.map(game => `
-        <div class="col-md-6 col-lg-4 mb-4">
-            <div class="game-card">
-                <div class="game-date">
-                    <i class="far fa-clock me-1"></i>
-                    ${game.game_date || '时间待定'}
-                </div>
+        <div class="col-md-6 col-xl-4">
+            <div class="game-card h-100">
+                <div class="game-date">${game.game_date || '时间待定'}</div>
                 <div class="game-teams">
                     <div class="game-team">
-                        <div class="game-team-logo" style="background: linear-gradient(135deg, #1D428A, #2E5BAA);">
-                            ${game.home_team}
-                        </div>
+                        <div class="game-team-logo">${game.home_team}</div>
                         <div class="game-team-name">${game.home_team_name || game.home_team}</div>
                     </div>
                     <div class="game-vs">VS</div>
@@ -330,190 +232,181 @@ function renderTodayGames(games) {
     `).join('');
 }
 
-// 渲染近期预测
 function renderRecentPredictions(predictions) {
     const container = document.getElementById('predictions-container');
-    
-    if (predictions.length === 0) {
+
+    if (!predictions.length) {
         container.innerHTML = `
             <div class="col-12">
                 <div class="alert-nba text-center py-5">
                     <i class="fas fa-inbox fa-3x mb-3"></i>
-                    <p class="mb-0">暂无预测记录</p>
-                    <a href="{{ url_for('pages.predict_page') }}" class="btn btn-primary mt-3">
-                        <i class="fas fa-plus me-2"></i>创建预测
-                    </a>
+                    <p class="mb-0">还没有历史预测记录。</p>
                 </div>
             </div>
         `;
         return;
     }
-    
-    container.innerHTML = predictions.map(pred => `
-        <div class="col-md-6 col-lg-4 mb-4">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="far fa-calendar me-2"></i>${pred.prediction_time || '最近'}</span>
-                    <span class="badge ${pred.confidence === 'high' ? 'badge-success' : 'badge-orange'}">
-                        ${pred.confidence === 'high' ? '高置信' : '中置信'}
-                    </span>
-                </div>
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <div class="text-center">
-                            <div class="fw-bold">${pred.home_team}</div>
-                            <small class="text-secondary">主队</small>
-                        </div>
-                        <div class="text-nba-orange fw-bold">VS</div>
-                        <div class="text-center">
-                            <div class="fw-bold">${pred.away_team}</div>
-                            <small class="text-secondary">客队</small>
-                        </div>
+
+    container.innerHTML = predictions.map(prediction => {
+        const confidence = Utils.getConfidenceMeta(prediction.confidence_level || prediction.confidence);
+        return `
+            <div class="col-md-6 col-xl-4">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>${prediction.prediction_time || '--'}</span>
+                        <span class="badge ${confidence.className}">置信度 ${confidence.label}</span>
                     </div>
-                    <div class="text-center">
-                        <div class="prediction-result-small">
-                            <span class="text-nba-orange">
-                                <i class="fas fa-trophy me-1"></i>
-                                预测: ${pred.predicted_winner}
-                            </span>
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div class="text-center">
+                                <div class="fw-bold">${prediction.home_team}</div>
+                                <small class="text-secondary">主队</small>
+                            </div>
+                            <div class="text-nba-orange fw-bold">VS</div>
+                            <div class="text-center">
+                                <div class="fw-bold">${prediction.away_team}</div>
+                                <small class="text-secondary">客队</small>
+                            </div>
                         </div>
-                        <div class="mt-2 d-flex justify-content-center gap-3 small">
-                            <span class="text-nba-blue">${pred.home_team}: ${((pred.home_win_prob || 0.5) * 100).toFixed(1)}%</span>
-                            <span class="text-nba-orange">${pred.away_team}: ${((pred.away_win_prob || 0.5) * 100).toFixed(1)}%</span>
+                        <div class="text-center mb-3">
+                            <div class="prediction-result-small text-nba-orange fw-bold">
+                                <i class="fas fa-trophy me-1"></i>${prediction.predicted_winner}
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between small text-secondary">
+                            <span>${prediction.home_team}: ${Utils.formatPercent(prediction.home_win_prob || prediction.home_win_probability || 0.5)}</span>
+                            <span>${prediction.away_team}: ${Utils.formatPercent(prediction.away_win_prob || prediction.away_win_probability || 0.5)}</span>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
-    `).join('');
-}
-
-// 渲染排名表格
-function renderRankingTable(teams) {
-    const tbody = document.getElementById('ranking-table');
-    
-    tbody.innerHTML = teams.map((team, index) => {
-        const trend = Math.random() > 0.5 ? 'up' : 'down'; // 模拟走势
-        return `
-            <tr onclick="window.location.href='/team/${team.abbr}'" style="cursor: pointer;">
-                <td class="text-center">
-                    <span class="badge ${index < 3 ? 'badge-orange' : 'badge-nba'}">
-                        ${index + 1}
-                    </span>
-                </td>
-                <td>
-                    <span class="me-2" style="font-weight:bold;color:#1D428A;">${team.abbr}</span>
-                    ${team.name}
-                </td>
-                <td class="text-center text-success">${team.wins || 0}</td>
-                <td class="text-center text-danger">${team.losses || 0}</td>
-                <td class="text-center text-nba-orange fw-bold">
-                    ${team.win_pct ? (team.win_pct * 100).toFixed(1) + '%' : '--'}
-                </td>
-                <td class="text-center d-none d-lg-table-cell">
-                    ${trend === 'up' 
-                        ? '<i class="fas fa-arrow-up text-success"></i>' 
-                        : '<i class="fas fa-arrow-down text-danger"></i>'}
-                </td>
-            </tr>
         `;
     }).join('');
 }
 
-// 初始化图表
-function initCharts() {
-    // 东西部胜率对比
-    const conferenceChart = echarts.init(document.getElementById('conference-chart'));
-    conferenceChart.setOption({
+function renderRankingTable(teams) {
+    const tbody = document.getElementById('ranking-table');
+
+    if (!teams.length) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" class="text-center py-5 text-secondary">暂无球队排名数据</td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = teams.map((team, index) => `
+        <tr onclick="window.location.href='/team/${team.abbr}'" style="cursor:pointer;">
+            <td class="text-center">
+                <span class="badge ${index < 3 ? 'badge-orange' : 'badge-nba'}">${index + 1}</span>
+            </td>
+            <td>
+                <span class="fw-bold text-nba-blue me-2">${team.abbr}</span>${team.name}
+            </td>
+            <td class="text-center">${team.wins || 0}-${team.losses || 0}</td>
+            <td class="text-center text-nba-orange fw-bold">${Utils.formatPercent(team.win_pct || 0)}</td>
+            <td class="text-center d-none d-lg-table-cell ${(team.net_rating || 0) >= 0 ? 'text-success' : 'text-danger'}">
+                ${(team.net_rating || 0).toFixed(1)}
+            </td>
+        </tr>
+    `).join('');
+}
+
+function renderConferenceChart(summary) {
+    const chart = chartManager.register('conference-chart', echarts.init(document.getElementById('conference-chart')));
+    const data = summary.length ? summary : [
+        { conference: 'Eastern', average_win_pct: 0, teams: 0 },
+        { conference: 'Western', average_win_pct: 0, teams: 0 }
+    ];
+
+    chart.setOption({
         tooltip: {
             trigger: 'axis',
-            axisPointer: { type: 'shadow' }
+            axisPointer: { type: 'shadow' },
+            formatter: params => `${params[0].name}<br/>平均胜率: ${params[0].value}%`
         },
-        legend: {
-            data: ['东部', '西部'],
-            textStyle: { color: '#a0a0a0' }
-        },
-        grid: {
-            left: '3%',
-            right: '4%',
-            bottom: '3%',
-            containLabel: true
-        },
-        xAxis: {
-            type: 'value',
-            axisLabel: { color: '#a0a0a0', formatter: '{value}%' },
-            splitLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }
-        },
-        yAxis: {
-            type: 'category',
-            data: ['冠军', '季后赛', '附加赛', '出局'],
-            axisLabel: { color: '#a0a0a0' }
-        },
-        series: [
-            {
-                name: '东部',
-                type: 'bar',
-                stack: 'total',
-                data: [55, 60, 45, 40],
-                itemStyle: { color: '#1D428A' },
-                barWidth: '40%'
-            },
-            {
-                name: '西部',
-                type: 'bar',
-                stack: 'total',
-                data: [45, 40, 55, 60],
-                itemStyle: { color: '#F58426' },
-                barWidth: '40%'
-            }
-        ]
-    });
-
-    // 预测准确率趋势
-    const accuracyChart = echarts.init(document.getElementById('accuracy-chart'));
-    accuracyChart.setOption({
-        tooltip: {
-            trigger: 'axis'
-        },
-        grid: {
-            left: '3%',
-            right: '4%',
-            bottom: '3%',
-            containLabel: true
-        },
+        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
         xAxis: {
             type: 'category',
-            boundaryGap: false,
-            data: ['1月', '2月', '3月', '4月', '5月', '6月'],
+            data: data.map(item => item.conference === 'Eastern' ? '东部' : item.conference === 'Western' ? '西部' : item.conference),
             axisLabel: { color: '#a0a0a0' }
         },
         yAxis: {
             type: 'value',
-            min: 50,
             max: 100,
             axisLabel: { color: '#a0a0a0', formatter: '{value}%' },
             splitLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }
         },
         series: [{
-            name: '准确率',
-            type: 'line',
-            data: [72, 68, 75, 78, 82, 76],
-            smooth: true,
-            lineStyle: { width: 3, color: '#F58426' },
-            areaStyle: {
-                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                    { offset: 0, color: 'rgba(245, 132, 38, 0.3)' },
-                    { offset: 1, color: 'rgba(0, 0, 0, 0)' }
-                ])
-            },
-            itemStyle: { color: '#F58426' }
+            type: 'bar',
+            data: data.map(item => Number(((item.average_win_pct || 0) * 100).toFixed(1))),
+            barWidth: '45%',
+            itemStyle: {
+                color: params => params.dataIndex === 0 ? '#1D428A' : '#F58426',
+                borderRadius: [6, 6, 0, 0]
+            }
         }]
     });
+}
 
-    // 响应式
-    window.addEventListener('resize', () => {
-        conferenceChart.resize();
-        accuracyChart.resize();
+function renderAccuracyChart(rows) {
+    const chart = chartManager.register('accuracy-chart', echarts.init(document.getElementById('accuracy-chart')));
+    const categories = rows.map(row => row.season);
+    const accuracy = rows.map(row => Number(((row.pairwise_accuracy || 0) * 100).toFixed(1)));
+    const mae = rows.map(row => Number((row.quality_mae || 0).toFixed(3)));
+
+    chart.setOption({
+        tooltip: { trigger: 'axis' },
+        legend: {
+            data: ['成对精度', '质量误差 MAE'],
+            textStyle: { color: '#a0a0a0' }
+        },
+        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+        xAxis: {
+            type: 'category',
+            boundaryGap: false,
+            data: categories.length ? categories : ['暂无数据'],
+            axisLabel: { color: '#a0a0a0' }
+        },
+        yAxis: [
+            {
+                type: 'value',
+                axisLabel: { color: '#a0a0a0', formatter: '{value}%' },
+                splitLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }
+            },
+            {
+                type: 'value',
+                axisLabel: { color: '#a0a0a0' },
+                splitLine: { show: false }
+            }
+        ],
+        series: [
+            {
+                name: '成对精度',
+                type: 'line',
+                smooth: true,
+                data: accuracy.length ? accuracy : [0],
+                lineStyle: { width: 3, color: '#F58426' },
+                itemStyle: { color: '#F58426' },
+                areaStyle: {
+                    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                        { offset: 0, color: 'rgba(245, 132, 38, 0.25)' },
+                        { offset: 1, color: 'rgba(245, 132, 38, 0.02)' }
+                    ])
+                }
+            },
+            {
+                name: '质量误差 MAE',
+                type: 'bar',
+                yAxisIndex: 1,
+                data: mae.length ? mae : [0],
+                itemStyle: {
+                    color: '#1D428A',
+                    borderRadius: [4, 4, 0, 0]
+                }
+            }
+        ]
     });
 }
 </script>

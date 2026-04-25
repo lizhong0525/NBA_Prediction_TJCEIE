@@ -1,899 +1,928 @@
 # -*- coding: utf-8 -*-
 """
-比赛预测模块
-基于历史数据和机器学习进行比赛结果预测
+Prediction engine for the NBA project.
 
-功能：
-- 基于球队特征的胜率预测
-- 关键因素分析
-- 预测结果生成与置信度评估
-- 历史对阵数据整合
-- 实时参数支持（球队状态、主客场、伤病情况等）
+The original project mixed empty-database fallbacks, hand-tuned weights and
+UI-unfriendly payloads, which made predictions unstable and difficult to render
+outside the console. This module replaces that flow with:
+
+1. Cached data loading from SQLite or ``output/*.csv``.
+2. A light-weight ridge model that estimates team strength from season features.
+3. Pairwise probability calibration built from historical season matchups.
+4. Normalized advanced weights so parameter tweaks stay bounded.
+5. UI-friendly result payloads including probability, margin and factor impact.
 """
+
+from __future__ import annotations
+
+from datetime import datetime
+from itertools import combinations
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-import sqlite3
-from typing import Dict, List, Optional, Tuple, Any
-from datetime import datetime
-import random
-import warnings
-import copy
-warnings.filterwarnings('ignore')
 
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import seaborn as sns
+from config import TEAM_INFO
+from data_repository import (
+    get_latest_season,
+    load_game_logs_frame,
+    load_team_clusters_frame,
+    load_team_features_frame,
+    normalize_team_abbr,
+    season_to_key,
+)
 
-import sys
-from pathlib import Path
-sys.path.append(str(Path(__file__).parent.parent))
 
-# ==================== 配置 ====================
-DATABASE_PATH = Path(__file__).parent.parent / 'data' / 'nba.db'
-OUTPUT_DIR = Path(__file__).parent.parent / 'output'
+OUTPUT_DIR = Path(__file__).parent.parent / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-# 球队缩写标准化映射
-TEAM_ABBR_NORMALIZE = {
-    'BKN': 'BRK', 'CHA': 'CHO', 'NO': 'NOP', 'NY': 'NYK', 'PHX': 'PHO', 'GS': 'GSW'
+TEAM_NAMES_CN = {
+    "ATL": "老鹰",
+    "BOS": "凯尔特人",
+    "BRK": "篮网",
+    "CHI": "公牛",
+    "CHO": "黄蜂",
+    "CLE": "骑士",
+    "DAL": "独行侠",
+    "DEN": "掘金",
+    "DET": "活塞",
+    "GSW": "勇士",
+    "HOU": "火箭",
+    "IND": "步行者",
+    "LAC": "快船",
+    "LAL": "湖人",
+    "MEM": "灰熊",
+    "MIA": "热火",
+    "MIL": "雄鹿",
+    "MIN": "森林狼",
+    "NOP": "鹈鹕",
+    "NYK": "尼克斯",
+    "OKC": "雷霆",
+    "ORL": "魔术",
+    "PHI": "76人",
+    "PHO": "太阳",
+    "POR": "开拓者",
+    "SAC": "国王",
+    "SAS": "马刺",
+    "TOR": "猛龙",
+    "UTA": "爵士",
+    "WAS": "奇才",
 }
 
-# 球队中文名映射
-TEAM_NAMES_CN = {
-    'ATL': '老鹰', 'BOS': '凯尔特人', 'BRK': '篮网', 'CHI': '公牛', 'CHO': '黄蜂',
-    'CLE': '骑士', 'DAL': '独行侠', 'DEN': '掘金', 'DET': '活塞', 'GSW': '勇士',
-    'HOU': '火箭', 'IND': '步行者', 'LAC': '快船', 'LAL': '湖人', 'MEM': '灰熊',
-    'MIA': '热火', 'MIL': '雄鹿', 'MIN': '森林狼', 'NOP': '鹈鹕', 'NYK': '尼克斯',
-    'OKC': '雷霆', 'ORL': '魔术', 'PHI': '76人', 'PHO': '太阳', 'POR': '开拓者',
-    'SAC': '国王', 'SAS': '马刺', 'TOR': '猛龙', 'UTA': '爵士', 'WAS': '奇才'
+MODEL_FEATURES = [
+    "avg_points",
+    "avg_points_allowed",
+    "point_diff_avg",
+    "recent_5_win_pct",
+    "home_win_pct",
+    "away_win_pct",
+    "offensive_rating",
+    "defensive_rating",
+    "net_rating",
+    "effective_fg_pct",
+    "true_shooting_pct",
+    "avg_assists",
+    "avg_rebounds",
+    "pace",
+]
+
+DEFAULT_WEIGHTS = {
+    "recent_form": 0.22,
+    "home_advantage": 0.18,
+    "historical_matchup": 0.12,
+    "efficiency_diff": 0.36,
+    "cluster_similarity": 0.12,
+}
+
+DEFAULT_HOME_PARAMS = {
+    "recent_win_pct": None,
+    "home_advantage": 0.03,
+    "injury_impact": 0.0,
+    "rest_days": 2,
+    "back_to_back": False,
+    "key_player_out": [],
+    "morale_boost": 0.0,
+    "custom_rating": None,
+}
+
+DEFAULT_AWAY_PARAMS = {
+    "recent_win_pct": None,
+    "home_advantage": 0.0,
+    "injury_impact": 0.0,
+    "rest_days": 2,
+    "back_to_back": False,
+    "key_player_out": [],
+    "morale_boost": 0.0,
+    "custom_rating": None,
 }
 
 
 def normalize_team(team_abbr: str) -> str:
-    """标准化球队缩写"""
-    return TEAM_ABBR_NORMALIZE.get(team_abbr.upper(), team_abbr.upper())
+    """Normalize external abbreviations to the internal standard."""
+    return normalize_team_abbr(team_abbr)
 
 
-def load_data():
-    """
-    加载所需数据
-    
-    Returns:
-        (球队特征DataFrame, 球队聚类DataFrame, 历史比赛DataFrame)
-    """
-    conn = sqlite3.connect(DATABASE_PATH)
-    
-    # 加载球队特征
+def _sigmoid(values: np.ndarray | float) -> np.ndarray | float:
+    clipped = np.clip(values, -35, 35)
+    return 1.0 / (1.0 + np.exp(-clipped))
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
     try:
-        team_features = pd.read_sql_query("SELECT * FROM team_features", conn)
-    except:
-        team_features = pd.DataFrame()
-    
-    # 加载球队聚类
-    try:
-        team_clusters = pd.read_sql_query("SELECT * FROM team_clusters", conn)
-    except:
-        team_clusters = pd.DataFrame()
-    
-    # 加载原始比赛数据
-    games = pd.read_sql_query("""
-        SELECT * FROM team_game_stats 
-        ORDER BY game_date DESC
-    """, conn)
-    
-    conn.close()
-    
-    # 标准化球队名称
-    if len(team_features) > 0:
-        team_features['team_abbr'] = team_features['team_abbr'].apply(normalize_team)
-    if len(team_clusters) > 0:
-        team_clusters['team_abbr'] = team_clusters['team_abbr'].apply(normalize_team)
-    if len(games) > 0:
-        games['team_abbr'] = games['team_abbr'].apply(normalize_team)
-        games['opponent_abbr'] = games['opponent_abbr'].apply(normalize_team)
-    
+        if pd.isna(value):
+            return default
+        return float(value)
+    except Exception:
+        return default
+
+
+def _normalize_weights(weights: Optional[Dict[str, float]]) -> Dict[str, float]:
+    merged = {**DEFAULT_WEIGHTS, **(weights or {})}
+    cleaned = {
+        key: max(_safe_float(value, DEFAULT_WEIGHTS[key]), 0.0)
+        for key, value in merged.items()
+    }
+    total = sum(cleaned.values()) or 1.0
+    return {key: value / total for key, value in cleaned.items()}
+
+
+def _join_feature_styles(
+    team_features: pd.DataFrame,
+    team_clusters: pd.DataFrame,
+) -> pd.DataFrame:
+    if team_features.empty:
+        return team_features
+
+    features = team_features.copy()
+    if team_clusters.empty:
+        if "style" not in features.columns:
+            features["style"] = None
+        return features
+
+    cluster_cols = [col for col in ("team_abbr", "season", "style", "cluster") if col in team_clusters.columns]
+    merged = features.merge(team_clusters[cluster_cols], on=["team_abbr", "season"], how="left")
+    return merged
+
+
+def load_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Load features, clusters and game logs with CSV fallbacks."""
+    team_features = load_team_features_frame()
+    team_clusters = load_team_clusters_frame()
+    games = load_game_logs_frame()
+    team_features = _join_feature_styles(team_features, team_clusters)
     return team_features, team_clusters, games
 
 
-def get_team_latest_stats(team_abbr: str, team_features: pd.DataFrame,
-                          season: str = None) -> Dict:
-    """
-    获取球队最新统计数据
-    
-    Args:
-        team_abbr: 球队缩写
-        team_features: 球队特征数据
-        season: 赛季（可选，默认最新赛季）
-        
-    Returns:
-        球队统计字典
-    """
+def get_team_latest_stats(
+    team_abbr: str,
+    team_features: pd.DataFrame,
+    season: Optional[str] = None,
+) -> Dict[str, Any]:
     team_abbr = normalize_team(team_abbr)
-    
-    if len(team_features) == 0:
+    if team_features.empty:
         return {}
-    
-    # 筛选球队
-    team_data = team_features[team_features['team_abbr'] == team_abbr]
-    
-    if len(team_data) == 0:
+
+    team_rows = team_features[team_features["team_abbr"] == team_abbr].copy()
+    if team_rows.empty:
         return {}
-    
-    # 获取最新赛季或指定赛季
+
     if season:
-        team_data = team_data[team_data['season'] == season]
-    
-    if len(team_data) == 0:
-        # 使用最新的可用数据
-        team_data = team_features[team_features['team_abbr'] == team_abbr].sort_values('season', ascending=False)
-    
-    if len(team_data) == 0:
-        return {}
-    
-    latest = team_data.iloc[0].to_dict()
-    return latest
+        preferred = team_rows[team_rows["season"] == season]
+        if not preferred.empty:
+            team_rows = preferred
+
+    team_rows = team_rows.sort_values("season", key=lambda s: s.map(season_to_key), ascending=False)
+    return team_rows.iloc[0].to_dict()
 
 
-def get_team_cluster(team_abbr: str, team_clusters: pd.DataFrame) -> Optional[Dict]:
-    """
-    获取球队聚类信息
-    
-    Args:
-        team_abbr: 球队缩写
-        team_clusters: 聚类数据
-        
-    Returns:
-        聚类信息字典
-    """
+def get_team_cluster(
+    team_abbr: str,
+    team_clusters: pd.DataFrame,
+    season: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
     team_abbr = normalize_team(team_abbr)
-    
-    if len(team_clusters) == 0:
+    if team_clusters.empty:
         return None
-    
-    team_cluster = team_clusters[team_clusters['team_abbr'] == team_abbr]
-    
-    if len(team_cluster) == 0:
+
+    rows = team_clusters[team_clusters["team_abbr"] == team_abbr].copy()
+    if rows.empty:
         return None
-    
-    return team_cluster.iloc[0].to_dict()
+
+    if season:
+        preferred = rows[rows["season"] == season]
+        if not preferred.empty:
+            rows = preferred
+
+    rows = rows.sort_values("season", key=lambda s: s.map(season_to_key), ascending=False)
+    return rows.iloc[0].to_dict()
 
 
-def get_head_to_head(home_team: str, away_team: str, games: pd.DataFrame,
-                    max_games: int = 10) -> Dict:
-    """
-    获取两队历史交锋记录
-    
-    Args:
-        home_team: 主队
-        away_team: 客队
-        games: 历史比赛数据
-        max_games: 最大查询场次
-        
-    Returns:
-        对阵记录字典
-    """
+def get_head_to_head(
+    home_team: str,
+    away_team: str,
+    games: pd.DataFrame,
+    max_games: int = 12,
+) -> Dict[str, Any]:
     home_team = normalize_team(home_team)
     away_team = normalize_team(away_team)
-    
-    if len(games) == 0:
-        return {'total': 0, 'home_wins': 0, 'away_wins': 0, 'home_win_pct': 0.5}
-    
-    # 查找两队交锋记录
+
+    if games.empty:
+        return {"total": 0, "home_wins": 0, "away_wins": 0, "home_win_pct": 0.5, "recent_results": []}
+
     h2h = games[
-        ((games['team_abbr'] == home_team) & (games['opponent_abbr'] == away_team)) |
-        ((games['team_abbr'] == away_team) & (games['opponent_abbr'] == home_team))
-    ].head(max_games)
-    
-    if len(h2h) == 0:
-        return {'total': 0, 'home_wins': 0, 'away_wins': 0, 'home_win_pct': 0.5}
-    
-    # 统计主场队获胜次数
-    home_wins = len(h2h[(h2h['team_abbr'] == home_team) & (h2h['result'] == 'W')])
-    away_wins = len(h2h[(h2h['team_abbr'] == away_team) & (h2h['result'] == 'W')])
-    
+        ((games["team_abbr"] == home_team) & (games["opponent_abbr"] == away_team))
+        | ((games["team_abbr"] == away_team) & (games["opponent_abbr"] == home_team))
+    ].sort_values("game_date", ascending=False).head(max_games)
+
+    if h2h.empty:
+        return {"total": 0, "home_wins": 0, "away_wins": 0, "home_win_pct": 0.5, "recent_results": []}
+
+    home_wins = len(h2h[(h2h["team_abbr"] == home_team) & (h2h["result"] == "W")])
+    away_wins = len(h2h[(h2h["team_abbr"] == away_team) & (h2h["result"] == "W")])
+
+    recent_results = []
+    for row in h2h.to_dict("records"):
+        is_home_row = bool(row.get("is_home"))
+        if row["team_abbr"] == home_team:
+            home_points = row.get("points") if is_home_row else row.get("opponent_points")
+            away_points = row.get("opponent_points") if is_home_row else row.get("points")
+        else:
+            home_points = row.get("opponent_points") if is_home_row else row.get("points")
+            away_points = row.get("points") if is_home_row else row.get("opponent_points")
+        recent_results.append(
+            {
+                "game_date": row.get("game_date"),
+                "home_team": home_team,
+                "away_team": away_team,
+                "home_points": home_points,
+                "away_points": away_points,
+                "winner": home_team if (home_points or 0) > (away_points or 0) else away_team,
+            }
+        )
+
     return {
-        'total': len(h2h),
-        'home_wins': home_wins,
-        'away_wins': away_wins,
-        'home_win_pct': home_wins / len(h2h) if len(h2h) > 0 else 0.5,
-        'recent_results': h2h[['game_date', 'team_abbr', 'opponent_abbr', 'result', 'points', 'opponent_points']].to_dict('records')
+        "total": int(len(h2h)),
+        "home_wins": int(home_wins),
+        "away_wins": int(away_wins),
+        "home_win_pct": float(home_wins / len(h2h)) if len(h2h) else 0.5,
+        "recent_results": recent_results,
     }
 
 
-def calculate_win_probability(home_stats: Dict, away_stats: Dict,
-                              h2h: Dict, home_cluster: Optional[Dict],
-                              away_cluster: Optional[Dict]) -> Tuple[float, Dict]:
-    """
-    计算主队获胜概率
-    
-    Args:
-        home_stats: 主队统计
-        away_stats: 客队统计
-        h2h: 历史对阵记录
-        home_cluster: 主队聚类信息
-        away_cluster: 客队聚类信息
-        
-    Returns:
-        (主队胜率, 贡献因子字典)
-    """
-    if not home_stats or not away_stats:
-        return 0.5, {}
-    
-    # 基础概率
-    base_prob = 0.5
-    
-    # 因子权重
-    factors = {}
-    
-    # 1. 近期战绩因子 (权重: 0.25)
-    home_recent = home_stats.get('recent_5_win_pct', 0.5)
-    away_recent = away_stats.get('recent_5_win_pct', 0.5)
-    recent_diff = home_recent - away_recent
-    factors['recent_form'] = {
-        'home': home_recent,
-        'away': away_recent,
-        'contribution': recent_diff * 0.25
-    }
-    base_prob += recent_diff * 0.25
-    
-    # 2. 进攻效率因子 (权重: 0.20)
-    home_off = home_stats.get('offensive_rating', 110)
-    away_off = away_stats.get('offensive_rating', 110)
-    off_diff = (home_off - away_off) / 100  # 标准化
-    factors['offense'] = {
-        'home': home_off,
-        'away': away_off,
-        'contribution': off_diff * 0.20
-    }
-    base_prob += off_diff * 0.20
-    
-    # 3. 防守效率因子 (权重: 0.20)
-    home_def = home_stats.get('defensive_rating', 110)
-    away_def = away_stats.get('defensive_rating', 110)
-    def_diff = (away_def - home_def) / 100  # 防守越好（数值越小），主队优势越大
-    factors['defense'] = {
-        'home': home_def,
-        'away': away_def,
-        'contribution': def_diff * 0.20
-    }
-    base_prob += def_diff * 0.20
-    
-    # 4. 主场优势因子 (权重: 0.15)
-    home_home_win = home_stats.get('home_win_pct', 0.5)
-    factors['home_advantage'] = {
-        'home_win_pct': home_home_win,
-        'contribution': (home_home_win - 0.5) * 0.30  # 主场胜率超出50%的部分
-    }
-    base_prob += (home_home_win - 0.5) * 0.30
-    
-    # 5. 历史交锋因子 (权重: 0.10)
-    if h2h and h2h['total'] > 0:
-        h2h_adv = (h2h['home_win_pct'] - 0.5) * 0.20
-        factors['head_to_head'] = {
-            'home_win_pct': h2h['home_win_pct'],
-            'total_games': h2h['total'],
-            'contribution': h2h_adv
+def _default_team_row(team_features: pd.DataFrame) -> Dict[str, Any]:
+    if team_features.empty:
+        return {
+            "win_pct": 0.5,
+            "recent_5_win_pct": 0.5,
+            "home_win_pct": 0.55,
+            "away_win_pct": 0.45,
+            "avg_points": 110.0,
+            "avg_points_allowed": 110.0,
+            "avg_assists": 25.0,
+            "avg_rebounds": 44.0,
+            "offensive_rating": 112.0,
+            "defensive_rating": 112.0,
+            "net_rating": 0.0,
+            "effective_fg_pct": 0.53,
+            "true_shooting_pct": 0.57,
+            "point_diff_avg": 0.0,
+            "pace": 100.0,
+            "style": None,
         }
-        base_prob += h2h_adv
-    else:
-        factors['head_to_head'] = {'contribution': 0}
-    
-    # 6. 聚类风格克制 (权重: 0.10)
-    if home_cluster and away_cluster:
-        # 不同风格对战有微调
-        style_modifier = 0.02  # 默认微调
-        factors['style_matchup'] = {
-            'home_style': home_cluster.get('style', 'Unknown'),
-            'away_style': away_cluster.get('style', 'Unknown'),
-            'contribution': style_modifier
+
+    medians = team_features[MODEL_FEATURES].median(numeric_only=True).to_dict()
+    medians.update(
+        {
+            "win_pct": float(team_features["win_pct"].median()),
+            "style": None,
         }
-        base_prob += style_modifier
-    else:
-        factors['style_matchup'] = {'contribution': 0}
-    
-    # 限制概率范围
-    base_prob = max(0.15, min(0.85, base_prob))
-    
-    return base_prob, factors
-
-
-def analyze_key_factors(home_team: str, away_team: str,
-                        home_stats: Dict, away_stats: Dict,
-                        factors: Dict) -> List[Dict]:
-    """
-    分析关键因素
-    
-    Args:
-        home_team: 主队
-        away_team: 客队
-        home_stats: 主队统计
-        away_stats: 客队统计
-        factors: 各因子贡献
-        
-    Returns:
-        关键因素列表
-    """
-    key_factors = []
-    
-    home_cn = TEAM_NAMES_CN.get(normalize_team(home_team), home_team)
-    away_cn = TEAM_NAMES_CN.get(normalize_team(away_team), away_team)
-    
-    # 分析进攻
-    home_off = home_stats.get('offensive_rating', 0)
-    away_off = away_stats.get('offensive_rating', 0)
-    if home_off > away_off + 2:
-        key_factors.append({
-            'type': 'offense',
-            'team': home_team,
-            'team_cn': home_cn,
-            'description': f'{home_cn}进攻效率更优 ({home_off:.1f} vs {away_off:.1f})',
-            'importance': abs(home_off - away_off) / 5
-        })
-    elif away_off > home_off + 2:
-        key_factors.append({
-            'type': 'offense',
-            'team': away_team,
-            'team_cn': away_cn,
-            'description': f'{away_cn}进攻效率更优 ({away_off:.1f} vs {home_off:.1f})',
-            'importance': abs(away_off - home_off) / 5
-        })
-    
-    # 分析防守
-    home_def = home_stats.get('defensive_rating', 0)
-    away_def = away_stats.get('defensive_rating', 0)
-    if home_def < away_def - 2:  # 数值越小越好
-        key_factors.append({
-            'type': 'defense',
-            'team': home_team,
-            'team_cn': home_cn,
-            'description': f'{home_cn}防守更稳固 ({home_def:.1f} vs {away_def:.1f})',
-            'importance': abs(away_def - home_def) / 5
-        })
-    elif away_def < home_def - 2:
-        key_factors.append({
-            'type': 'defense',
-            'team': away_team,
-            'team_cn': away_cn,
-            'description': f'{away_cn}防守更稳固 ({away_def:.1f} vs {home_def:.1f})',
-            'importance': abs(home_def - away_def) / 5
-        })
-    
-    # 分析近期状态
-    home_recent = home_stats.get('recent_5_win_pct', 0.5)
-    away_recent = away_stats.get('recent_5_win_pct', 0.5)
-    if home_recent > away_recent + 0.1:
-        key_factors.append({
-            'type': 'form',
-            'team': home_team,
-            'team_cn': home_cn,
-            'description': f'{home_cn}近期状态更佳 ({(home_recent*100):.0f}% vs {(away_recent*100):.0f}%)',
-            'importance': abs(home_recent - away_recent) * 5
-        })
-    elif away_recent > home_recent + 0.1:
-        key_factors.append({
-            'type': 'form',
-            'team': away_team,
-            'team_cn': away_cn,
-            'description': f'{away_cn}近期状态更佳 ({(away_recent*100):.0f}% vs {(home_recent*100):.0f}%)',
-            'importance': abs(away_recent - home_recent) * 5
-        })
-    
-    # 分析主场优势
-    home_win_pct = home_stats.get('home_win_pct', 0.5)
-    if home_win_pct > 0.6:
-        key_factors.append({
-            'type': 'home',
-            'team': home_team,
-            'team_cn': home_cn,
-            'description': f'{home_cn}主场强势 ({home_win_pct*100:.0f}%胜率)',
-            'importance': (home_win_pct - 0.5) * 3
-        })
-    
-    # 按重要性排序
-    key_factors = sorted(key_factors, key=lambda x: x['importance'], reverse=True)
-    
-    return key_factors[:5]  # 返回前5个
-
-
-def determine_confidence(home_win_prob: float, key_factors: List[Dict],
-                         h2h: Dict) -> str:
-    """
-    确定预测置信度
-    
-    Args:
-        home_win_prob: 主队胜率
-        h2h: 对阵记录
-        
-    Returns:
-        置信度等级
-    """
-    # 计算概率偏向程度
-    prob_swing = abs(home_win_prob - 0.5) * 2  # 0-1范围
-    
-    # 因子一致性
-    factor_count = len(key_factors)
-    
-    # 对阵数据支持度
-    h2h_support = 0
-    if h2h and h2h['total'] >= 3:
-        h2h_support = min(0.1, h2h['total'] * 0.02)
-    
-    # 综合评分
-    confidence_score = prob_swing * 0.4 + factor_count * 0.1 + h2h_support
-    
-    if confidence_score > 0.7:
-        return "高"
-    elif confidence_score > 0.4:
-        return "中"
-    else:
-        return "低"
-
-
-def predict_game(home_team: str, away_team: str) -> Dict:
-    """
-    预测单场比赛结果
-    
-    Args:
-        home_team: 主队缩写
-        away_team: 客队缩写
-        
-    Returns:
-        预测结果字典
-    """
-    print(f"\n{'='*60}")
-    print(f"比赛预测: {home_team} (主场) vs {away_team} (客场)")
-    print(f"{'='*60}")
-    
-    # 加载数据
-    team_features, team_clusters, games = load_data()
-    
-    # 标准化球队名称
-    home_team = normalize_team(home_team)
-    away_team = normalize_team(away_team)
-    
-    # 获取球队统计
-    home_stats = get_team_latest_stats(home_team, team_features)
-    away_stats = get_team_latest_stats(away_team, team_features)
-    
-    # 获取聚类信息
-    home_cluster = get_team_cluster(home_team, team_clusters)
-    away_cluster = get_team_cluster(away_team, team_clusters)
-    
-    # 获取历史对阵
-    h2h = get_head_to_head(home_team, away_team, games)
-    
-    # 检查数据完整性
-    if not home_stats:
-        print(f"[警告] 未找到 {home_team} 的统计数据")
-        home_stats = {}
-    if not away_stats:
-        print(f"[警告] 未找到 {away_team} 的统计数据")
-        away_stats = {}
-    
-    # 计算胜率
-    home_win_prob, factors = calculate_win_probability(
-        home_stats, away_stats, h2h, home_cluster, away_cluster
     )
-    
-    # 分析关键因素
-    key_factors = analyze_key_factors(home_team, away_team, home_stats, away_stats, factors)
-    
-    # 确定置信度
-    confidence = determine_confidence(home_win_prob, key_factors, h2h)
-    
-    # 预测结果
-    predicted_winner = home_team if home_win_prob > 0.5 else away_team
-    predicted_winner_cn = TEAM_NAMES_CN.get(predicted_winner, predicted_winner)
-    
-    away_win_prob = 1 - home_win_prob
-    
-    # 组装结果
-    result = {
-        'prediction_id': f"PRD-{datetime.now().strftime('%Y%m%d%H%M%S')}",
-        'prediction_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'home_team': home_team,
-        'home_team_cn': TEAM_NAMES_CN.get(home_team, home_team),
-        'away_team': away_team,
-        'away_team_cn': TEAM_NAMES_CN.get(away_team, away_team),
-        'predicted_winner': predicted_winner,
-        'predicted_winner_cn': predicted_winner_cn,
-        'home_win_probability': round(home_win_prob, 4),
-        'away_win_probability': round(away_win_prob, 4),
-        'confidence_level': confidence,
-        'key_factors': key_factors,
-        'home_stats': {k: round(v, 2) if isinstance(v, float) else v 
-                       for k, v in home_stats.items() if isinstance(v, (int, float))},
-        'away_stats': {k: round(v, 2) if isinstance(v, float) else v 
-                      for k, v in away_stats.items() if isinstance(v, (int, float))},
-        'head_to_head': h2h,
-        'home_cluster': home_cluster.get('style') if home_cluster else None,
-        'away_cluster': away_cluster.get('style') if away_cluster else None
+    return medians
+
+
+def _prepare_training_frame(team_features: pd.DataFrame, season: Optional[str]) -> pd.DataFrame:
+    if team_features.empty:
+        return team_features
+
+    df = team_features.copy()
+    df["season_key"] = df["season"].map(season_to_key)
+
+    if season:
+        target_key = season_to_key(season)
+        historical = df[df["season_key"] < target_key].copy()
+        if len(historical) >= 45:
+            return historical
+
+    if len(df) > 45:
+        latest_key = df["season_key"].max()
+        historical = df[df["season_key"] < latest_key].copy()
+        if len(historical) >= 45:
+            return historical
+
+    return df
+
+
+def _fit_ridge_regression(X: np.ndarray, y: np.ndarray, alpha: float = 1.5) -> Tuple[np.ndarray, float]:
+    design = np.column_stack([np.ones(len(X)), X])
+    ridge = alpha * np.eye(design.shape[1])
+    ridge[0, 0] = 0.0
+    coefficients = np.linalg.solve(design.T @ design + ridge, design.T @ y)
+    intercept = float(coefficients[0])
+    beta = coefficients[1:]
+    return beta, intercept
+
+
+def _fit_logistic_calibration(edges: np.ndarray, labels: np.ndarray) -> Tuple[float, float]:
+    if len(edges) == 0:
+        return 0.0, 6.5
+
+    X = np.column_stack([np.ones(len(edges)), edges])
+    params = np.array([0.0, 6.0], dtype=float)
+    regularization = np.diag([0.0, 0.05])
+
+    for _ in range(20):
+        logits = X @ params
+        probs = _sigmoid(logits)
+        weights = np.clip(probs * (1.0 - probs), 1e-5, None)
+        gradient = (X.T @ (probs - labels)) / len(edges) + regularization @ params
+        hessian = (X.T * weights) @ X / len(edges) + regularization
+        step = np.linalg.solve(hessian, gradient)
+        params -= step
+        if np.max(np.abs(step)) < 1e-7:
+            break
+
+    return float(params[0]), float(params[1])
+
+
+def _build_strength_model(team_features: pd.DataFrame, season: Optional[str] = None) -> Dict[str, Any]:
+    if team_features.empty:
+        return {
+            "means": np.zeros(len(MODEL_FEATURES)),
+            "stds": np.ones(len(MODEL_FEATURES)),
+            "beta": np.zeros(len(MODEL_FEATURES)),
+            "intercept": 0.5,
+            "cluster_strengths": {},
+            "calibration_intercept": 0.0,
+            "calibration_slope": 6.0,
+            "feature_importance": [],
+        }
+
+    training = _prepare_training_frame(team_features, season)
+    frame = training.copy()
+
+    medians = frame[MODEL_FEATURES].median(numeric_only=True)
+    X = frame[MODEL_FEATURES].fillna(medians).astype(float).to_numpy()
+    y = frame["win_pct"].astype(float).to_numpy()
+
+    means = X.mean(axis=0)
+    stds = X.std(axis=0)
+    stds[stds < 1e-6] = 1.0
+    X_scaled = (X - means) / stds
+
+    beta, intercept = _fit_ridge_regression(X_scaled, y, alpha=1.2)
+
+    feature_importance = [
+        {"feature": feature, "importance": float(abs(weight))}
+        for feature, weight in sorted(zip(MODEL_FEATURES, beta), key=lambda item: abs(item[1]), reverse=True)
+    ]
+
+    cluster_strengths = (
+        frame.dropna(subset=["style"])
+        .groupby("style")["win_pct"]
+        .mean()
+        .to_dict()
+        if "style" in frame.columns
+        else {}
+    )
+
+    pair_edges: List[float] = []
+    pair_labels: List[float] = []
+    normalized_weights = _normalize_weights(None)
+
+    for _, season_rows in frame.groupby("season"):
+        records = season_rows.to_dict("records")
+        if len(records) < 2:
+            continue
+        for left, right in combinations(records, 2):
+            if abs(_safe_float(left.get("win_pct")) - _safe_float(right.get("win_pct"))) < 1e-9:
+                continue
+            edge, _ = _compose_factor_breakdown(
+                left,
+                right,
+                normalized_weights,
+                {
+                    "means": means,
+                    "stds": stds,
+                    "beta": beta,
+                    "intercept": intercept,
+                    "cluster_strengths": cluster_strengths,
+                },
+                {"total": 0, "home_win_pct": 0.5},
+                {"style": left.get("style")},
+                {"style": right.get("style")},
+                include_home_edge=True,
+            )
+            pair_edges.extend([edge, -edge])
+            pair_labels.extend([
+                1.0 if _safe_float(left.get("win_pct")) > _safe_float(right.get("win_pct")) else 0.0,
+                1.0 if _safe_float(right.get("win_pct")) > _safe_float(left.get("win_pct")) else 0.0,
+            ])
+
+    calibration_intercept, calibration_slope = _fit_logistic_calibration(
+        np.asarray(pair_edges, dtype=float),
+        np.asarray(pair_labels, dtype=float),
+    )
+
+    return {
+        "means": means,
+        "stds": stds,
+        "beta": beta,
+        "intercept": intercept,
+        "cluster_strengths": cluster_strengths,
+        "calibration_intercept": calibration_intercept,
+        "calibration_slope": calibration_slope,
+        "feature_importance": feature_importance,
+        "training_rows": len(training),
     }
-    
-    # 打印结果
-    print(f"\n📊 预测分析:")
-    print(f"   {home_team} ({result['home_team_cn']}) 主场胜率: {home_win_prob*100:.1f}%")
-    print(f"   {away_team} ({result['away_team_cn']}) 客场胜率: {away_win_prob*100:.1f}%")
-    print(f"   预测获胜: {predicted_winner} ({predicted_winner_cn})")
-    print(f"   置信度: {confidence}")
-    
-    if key_factors:
-        print(f"\n🔑 关键因素:")
-        for i, factor in enumerate(key_factors, 1):
-            print(f"   {i}. {factor['description']}")
-    
-    if h2h and h2h['total'] > 0:
-        print(f"\n📈 历史对阵 ({home_team} 主场): {h2h['home_wins']}胜 {h2h['away_wins']}负 (共{h2h['total']}场)")
-    
-    if home_cluster and away_cluster:
-        print(f"\n🏀 球队风格:")
-        print(f"   {home_team}: {home_cluster.get('style', 'Unknown')}")
-        print(f"   {away_team}: {away_cluster.get('style', 'Unknown')}")
-    
-    return result
 
 
-def batch_predict(matchups: List[Tuple[str, str]]) -> List[Dict]:
-    """
-    批量预测多场比赛
-    
-    Args:
-        matchups: 比赛对阵列表 [(主队, 客队), ...]
-        
-    Returns:
-        预测结果列表
-    """
-    print(f"\n{'='*60}")
-    print(f"批量预测: {len(matchups)} 场比赛")
-    print(f"{'='*60}")
-    
-    results = []
-    
-    for i, (home, away) in enumerate(matchups, 1):
-        print(f"\n[{i}/{len(matchups)}]")
-        try:
-            result = predict_game(home, away)
-            results.append(result)
-        except Exception as e:
-            print(f"[错误] 预测失败: {e}")
-            results.append({
-                'home_team': home,
-                'away_team': away,
-                'error': str(e)
-            })
-    
-    return results
+def _predict_strength(row: Dict[str, Any], model: Dict[str, Any]) -> float:
+    values = np.array([_safe_float(row.get(feature), 0.0) for feature in MODEL_FEATURES], dtype=float)
+    scaled = (values - model["means"]) / model["stds"]
+    strength = model["intercept"] + float(scaled @ model["beta"])
+    return float(np.clip(strength, 0.05, 0.95))
 
 
-# ==================== 实时参数预测接口 ====================
+def _compose_factor_breakdown(
+    home_stats: Dict[str, Any],
+    away_stats: Dict[str, Any],
+    weights: Dict[str, float],
+    model: Dict[str, Any],
+    h2h: Dict[str, Any],
+    home_cluster: Optional[Dict[str, Any]],
+    away_cluster: Optional[Dict[str, Any]],
+    include_home_edge: bool = True,
+) -> Tuple[float, Dict[str, Dict[str, float]]]:
+    home_strength = _predict_strength(home_stats, model)
+    away_strength = _predict_strength(away_stats, model)
+    strength_edge = home_strength - away_strength
 
-# 默认权重配置
-DEFAULT_WEIGHTS = {
-    'recent_form': 0.25,           # 近期状态权重
-    'home_advantage': 0.15,        # 主场优势权重
-    'historical_matchup': 0.10,   # 历史交锋权重
-    'efficiency_diff': 0.40,      # 效率差权重（进攻+防守）
-    'cluster_similarity': 0.10,   # 风格相似度权重
-}
+    net_edge = (
+        (_safe_float(home_stats.get("net_rating")) - _safe_float(away_stats.get("net_rating"))) / 14.0
+        + (_safe_float(home_stats.get("point_diff_avg")) - _safe_float(away_stats.get("point_diff_avg"))) / 12.0
+    ) / 2.0
+    shooting_edge = (
+        (_safe_float(home_stats.get("true_shooting_pct"), 0.57) - _safe_float(away_stats.get("true_shooting_pct"), 0.57)) * 4.5
+        + (_safe_float(home_stats.get("effective_fg_pct"), 0.53) - _safe_float(away_stats.get("effective_fg_pct"), 0.53)) * 4.0
+    ) / 2.0
+    efficiency_edge = 0.65 * strength_edge + 0.2 * net_edge + 0.15 * shooting_edge
 
-# 默认实时参数
-DEFAULT_HOME_PARAMS = {
-    'recent_win_pct': None,        # 近期胜率（手动输入）
-    'home_advantage': 0.06,        # 主场优势加成（0-0.1）
-    'injury_impact': 0,            # 伤病影响（-0.2 to 0）
-    'rest_days': 2,                # 休息天数
-    'back_to_back': False,         # 是否背靠背
-    'key_player_out': [],         # 缺阵核心球员
-    'morale_boost': 0,             # 士气加成（-0.1 to 0.1）
-    'custom_rating': None,         # 自定义实力评分（覆盖计算值）
-}
+    recent_edge = _safe_float(home_stats.get("recent_5_win_pct"), 0.5) - _safe_float(
+        away_stats.get("recent_5_win_pct"), 0.5
+    )
+    home_edge = (
+        _safe_float(home_stats.get("home_win_pct"), 0.55)
+        - _safe_float(away_stats.get("away_win_pct"), 0.45)
+    ) if include_home_edge else 0.0
+    historical_edge = _safe_float(h2h.get("home_win_pct"), 0.5) - 0.5
 
-DEFAULT_AWAY_PARAMS = {
-    'recent_win_pct': None,
-    'home_advantage': 0,           # 客场无主场加成
-    'injury_impact': 0,
-    'rest_days': 2,
-    'back_to_back': False,
-    'key_player_out': [],
-    'morale_boost': 0,
-    'custom_rating': None,
-}
+    home_style = (home_cluster or {}).get("style") or home_stats.get("style")
+    away_style = (away_cluster or {}).get("style") or away_stats.get("style")
+    cluster_strengths = model.get("cluster_strengths", {})
+    cluster_edge = _safe_float(cluster_strengths.get(home_style), 0.5) - _safe_float(
+        cluster_strengths.get(away_style), 0.5
+    )
+
+    contributions = {
+        "recent_form": {
+            "edge": recent_edge,
+            "weight": weights["recent_form"],
+            "contribution": recent_edge * weights["recent_form"],
+        },
+        "home_advantage": {
+            "edge": home_edge,
+            "weight": weights["home_advantage"],
+            "contribution": home_edge * weights["home_advantage"],
+        },
+        "historical_matchup": {
+            "edge": historical_edge,
+            "weight": weights["historical_matchup"],
+            "contribution": historical_edge * weights["historical_matchup"],
+        },
+        "efficiency_diff": {
+            "edge": efficiency_edge,
+            "weight": weights["efficiency_diff"],
+            "contribution": efficiency_edge * weights["efficiency_diff"],
+        },
+        "cluster_similarity": {
+            "edge": cluster_edge,
+            "weight": weights["cluster_similarity"],
+            "contribution": cluster_edge * weights["cluster_similarity"],
+        },
+    }
+
+    total_edge = sum(item["contribution"] for item in contributions.values())
+    return total_edge, contributions
 
 
-def validate_params(params: Dict, param_type: str = 'home') -> Tuple[bool, str]:
-    """
-    验证实时参数的有效性
-    
-    Args:
-        params: 待验证的参数字典
-        param_type: 参数类型 ('home' 或 'away')
-        
-    Returns:
-        (是否有效, 错误信息)
-    """
+def calculate_weighted_probability(
+    home_stats: Dict[str, Any],
+    away_stats: Dict[str, Any],
+    h2h: Dict[str, Any],
+    home_cluster: Optional[Dict[str, Any]],
+    away_cluster: Optional[Dict[str, Any]],
+    weights: Dict[str, float],
+) -> Tuple[float, Dict[str, Dict[str, float]]]:
+    team_features, _, _ = load_data()
+    model = _build_strength_model(team_features, season=home_stats.get("season"))
+    normalized_weights = _normalize_weights(weights)
+    edge, contributions = _compose_factor_breakdown(
+        home_stats,
+        away_stats,
+        normalized_weights,
+        model,
+        h2h,
+        home_cluster,
+        away_cluster,
+    )
+    probability = float(
+        _sigmoid(model["calibration_intercept"] + model["calibration_slope"] * edge)
+    )
+    return probability, contributions
+
+
+def calculate_win_probability(
+    home_stats: Dict[str, Any],
+    away_stats: Dict[str, Any],
+    h2h: Dict[str, Any],
+    home_cluster: Optional[Dict[str, Any]],
+    away_cluster: Optional[Dict[str, Any]],
+) -> Tuple[float, Dict[str, Dict[str, float]]]:
+    return calculate_weighted_probability(
+        home_stats,
+        away_stats,
+        h2h,
+        home_cluster,
+        away_cluster,
+        DEFAULT_WEIGHTS,
+    )
+
+
+def validate_params(params: Dict, param_type: str = "home") -> Tuple[bool, str]:
+    del param_type
     valid_keys = set(DEFAULT_HOME_PARAMS.keys())
-    
     for key in params.keys():
         if key not in valid_keys:
-            return False, f"未知参数: {key}"
-    
-    # 验证数值范围
-    if 'recent_win_pct' in params and params['recent_win_pct'] is not None:
-        if not 0 <= params['recent_win_pct'] <= 1:
-            return False, "recent_win_pct 必须在 0-1 之间"
-    
-    if 'home_advantage' in params:
-        if not -0.1 <= params['home_advantage'] <= 0.1:
-            return False, "home_advantage 必须在 -0.1 到 0.1 之间"
-    
-    if 'injury_impact' in params:
-        if not -0.3 <= params['injury_impact'] <= 0:
-            return False, "injury_impact 必须在 -0.3 到 0 之间"
-    
-    if 'rest_days' in params:
-        if not isinstance(params['rest_days'], int) or params['rest_days'] < 0:
-            return False, "rest_days 必须是 >= 0 的整数"
-    
-    if 'morale_boost' in params:
-        if not -0.15 <= params['morale_boost'] <= 0.15:
-            return False, "morale_boost 必须在 -0.15 到 0.15 之间"
-    
-    if 'custom_rating' in params and params['custom_rating'] is not None:
-        if not 0 <= params['custom_rating'] <= 100:
-            return False, "custom_rating 必须在 0-100 之间"
-    
+            return False, f"Unknown parameter: {key}"
+
+    if "recent_win_pct" in params and params["recent_win_pct"] is not None:
+        if not 0 <= _safe_float(params["recent_win_pct"], -1) <= 1:
+            return False, "recent_win_pct must be between 0 and 1"
+
+    if "home_advantage" in params:
+        if not -0.15 <= _safe_float(params["home_advantage"], 99) <= 0.15:
+            return False, "home_advantage must be between -0.15 and 0.15"
+
+    if "injury_impact" in params:
+        if not -0.35 <= _safe_float(params["injury_impact"], 99) <= 0.0:
+            return False, "injury_impact must be between -0.35 and 0"
+
+    if "rest_days" in params:
+        try:
+            rest_days = int(params["rest_days"])
+        except Exception:
+            return False, "rest_days must be an integer"
+        if rest_days < 0 or rest_days > 10:
+            return False, "rest_days must be between 0 and 10"
+
+    if "morale_boost" in params:
+        if not -0.2 <= _safe_float(params["morale_boost"], 99) <= 0.2:
+            return False, "morale_boost must be between -0.2 and 0.2"
+
+    if "custom_rating" in params and params["custom_rating"] is not None:
+        if not 0 <= _safe_float(params["custom_rating"], -1) <= 100:
+            return False, "custom_rating must be between 0 and 100"
+
     return True, ""
 
 
 def validate_weights(weights: Dict) -> Tuple[bool, str]:
-    """
-    验证权重配置的有效性
-    
-    Args:
-        weights: 权重配置字典
-        
-    Returns:
-        (是否有效, 错误信息)
-    """
     valid_keys = set(DEFAULT_WEIGHTS.keys())
-    
-    for key in weights.keys():
+    for key, value in weights.items():
         if key not in valid_keys:
-            return False, f"未知权重: {key}"
-        
-        if not isinstance(weights[key], (int, float)):
-            return False, f"权重 {key} 必须是数值类型"
-        
-        if weights[key] < 0:
-            return False, f"权重 {key} 不能为负数"
-    
+            return False, f"Unknown weight: {key}"
+        try:
+            numeric = float(value)
+        except Exception:
+            return False, f"Weight {key} must be numeric"
+        if numeric < 0:
+            return False, f"Weight {key} cannot be negative"
     return True, ""
 
 
 def merge_params(default_params: Dict, custom_params: Optional[Dict]) -> Dict:
-    """
-    合并默认参数和自定义参数
-    
-    Args:
-        default_params: 默认参数
-        custom_params: 自定义参数
-        
-    Returns:
-        合并后的参数字典
-    """
-    merged = copy.deepcopy(default_params)
-    
+    merged = dict(default_params)
     if custom_params:
         merged.update(custom_params)
-    
     return merged
 
 
 def apply_realtime_adjustments(
-    base_prob: float,
-    home_params: Dict,
-    away_params: Dict,
-    weights: Dict
-) -> Tuple[float, Dict]:
-    """
-    应用实时参数调整
-    
-    Args:
-        base_prob: 基础胜率
-        home_params: 主队实时参数
-        away_params: 客队实时参数
-        weights: 权重配置
-        
-    Returns:
-        (调整后胜率, 调整详情)
-    """
-    adjustments = {}
-    adjusted_prob = base_prob
-    
-    # 1. 伤病影响调整
-    injury_home = home_params.get('injury_impact', 0)
-    injury_away = away_params.get('injury_impact', 0)
-    injury_diff = injury_home - injury_away  # 负值对主队不利
-    adjustments['injury_impact'] = {
-        'home': injury_home,
-        'away': injury_away,
-        'effect': injury_diff,
-        'description': f"伤病影响: {'+' if injury_diff >= 0 else ''}{injury_diff:.3f}"
+    base_edge: float,
+    home_params: Dict[str, Any],
+    away_params: Dict[str, Any],
+    model: Dict[str, Any],
+    home_strength: float,
+    away_strength: float,
+) -> Tuple[float, Dict[str, Any]]:
+    adjusted_edge = base_edge
+    summary: List[Dict[str, Any]] = []
+
+    injury_effect = _safe_float(home_params.get("injury_impact")) - _safe_float(away_params.get("injury_impact"))
+    if abs(injury_effect) > 1e-9:
+        adjusted_edge += injury_effect
+        summary.append(
+            {
+                "name": "Injuries",
+                "effect": round(injury_effect, 4),
+                "description": f"Injury adjustment {'favours home' if injury_effect > 0 else 'hurts home'} by {abs(injury_effect)*100:.1f} pts",
+            }
+        )
+
+    rest_effect = np.clip(
+        (int(home_params.get("rest_days", 2)) - int(away_params.get("rest_days", 2))) * 0.015,
+        -0.06,
+        0.06,
+    )
+    if abs(rest_effect) > 1e-9:
+        adjusted_edge += float(rest_effect)
+        summary.append(
+            {
+                "name": "Rest days",
+                "effect": round(float(rest_effect), 4),
+                "description": f"Rest differential adds {float(rest_effect)*100:.1f} pts to the home edge",
+            }
+        )
+
+    back_to_back_effect = 0.0
+    if home_params.get("back_to_back"):
+        back_to_back_effect -= 0.03
+    if away_params.get("back_to_back"):
+        back_to_back_effect += 0.03
+    if abs(back_to_back_effect) > 1e-9:
+        adjusted_edge += back_to_back_effect
+        summary.append(
+            {
+                "name": "Back-to-back",
+                "effect": round(back_to_back_effect, 4),
+                "description": "Second night of a back-to-back changes the matchup balance",
+            }
+        )
+
+    morale_effect = _safe_float(home_params.get("morale_boost")) - _safe_float(away_params.get("morale_boost"))
+    if abs(morale_effect) > 1e-9:
+        adjusted_edge += morale_effect
+        summary.append(
+            {
+                "name": "Momentum",
+                "effect": round(morale_effect, 4),
+                "description": f"Momentum swing contributes {morale_effect*100:.1f} pts",
+            }
+        )
+
+    custom_effect = 0.0
+    if home_params.get("custom_rating") is not None:
+        custom_effect += (_safe_float(home_params["custom_rating"]) / 100.0) - home_strength
+    if away_params.get("custom_rating") is not None:
+        custom_effect -= (_safe_float(away_params["custom_rating"]) / 100.0) - away_strength
+    if abs(custom_effect) > 1e-9:
+        adjusted_edge += custom_effect
+        summary.append(
+            {
+                "name": "Manual override",
+                "effect": round(custom_effect, 4),
+                "description": "Custom team rating overrides part of the learned strength score",
+            }
+        )
+
+    if home_params.get("recent_win_pct") is not None or away_params.get("recent_win_pct") is not None:
+        home_recent = home_params.get("recent_win_pct")
+        away_recent = away_params.get("recent_win_pct")
+        if home_recent is not None and away_recent is not None:
+            recent_override = (_safe_float(home_recent) - _safe_float(away_recent)) * 0.20
+            adjusted_edge += recent_override
+            summary.append(
+                {
+                    "name": "Manual recent form",
+                    "effect": round(recent_override, 4),
+                    "description": "Manual recent win-rate inputs refined the short-term form signal",
+                }
+            )
+
+    base_probability = float(_sigmoid(model["calibration_intercept"] + model["calibration_slope"] * base_edge))
+    final_probability = float(
+        np.clip(_sigmoid(model["calibration_intercept"] + model["calibration_slope"] * adjusted_edge), 0.05, 0.95)
+    )
+
+    return adjusted_edge, {
+        "base_probability": round(base_probability, 4),
+        "final_probability": round(final_probability, 4),
+        "summary": summary,
+        "total_edge_shift": round(adjusted_edge - base_edge, 4),
     }
-    adjusted_prob += injury_diff * weights.get('recent_form', 0.25)
-    
-    # 2. 休息天数调整
-    rest_home = home_params.get('rest_days', 2)
-    rest_away = away_params.get('rest_days', 2)
-    # 休息天数越多越有利，但边际效益递减
-    rest_home_factor = min(0.03, rest_home * 0.015)
-    rest_away_factor = min(0.03, rest_away * 0.015)
-    rest_diff = rest_home_factor - rest_away_factor
-    adjustments['rest_days'] = {
-        'home': rest_home,
-        'away': rest_away,
-        'effect': rest_diff,
-        'description': f"休息调整: {'+' if rest_diff >= 0 else ''}{rest_diff:.3f}"
-    }
-    adjusted_prob += rest_diff
-    
-    # 3. 背靠背惩罚
-    btb_penalty = 0
-    if home_params.get('back_to_back', False):
-        btb_penalty -= 0.02
-    if away_params.get('back_to_back', False):
-        btb_penalty += 0.02
-    adjustments['back_to_back'] = {
-        'home': home_params.get('back_to_back', False),
-        'away': away_params.get('back_to_back', False),
-        'effect': btb_penalty,
-        'description': f"背靠背: {'+' if btb_penalty >= 0 else ''}{btb_penalty:.3f}"
-    }
-    adjusted_prob += btb_penalty
-    
-    # 4. 士气加成
-    morale_home = home_params.get('morale_boost', 0)
-    morale_away = away_params.get('morale_boost', 0)
-    morale_diff = morale_home - morale_away
-    adjustments['morale_boost'] = {
-        'home': morale_home,
-        'away': morale_away,
-        'effect': morale_diff,
-        'description': f"士气调整: {'+' if morale_diff >= 0 else ''}{morale_diff:.3f}"
-    }
-    adjusted_prob += morale_diff
-    
-    # 5. 缺阵球员信息
-    home_players_out = home_params.get('key_player_out', [])
-    away_players_out = away_params.get('key_player_out', [])
-    adjustments['key_players_out'] = {
-        'home': home_players_out,
-        'away': away_players_out,
-        'effect': 0,
-        'description': f"缺阵: {', '.join(home_players_out) if home_players_out else '无'} vs {', '.join(away_players_out) if away_players_out else '无'}"
-    }
-    
-    # 限制概率范围
-    adjusted_prob = max(0.10, min(0.90, adjusted_prob))
-    
-    return adjusted_prob, adjustments
 
 
-def calculate_weighted_probability(
-    home_stats: Dict,
-    away_stats: Dict,
-    h2h: Dict,
-    home_cluster: Optional[Dict],
-    away_cluster: Optional[Dict],
-    weights: Dict
-) -> Tuple[float, Dict]:
-    """
-    使用可配置权重计算胜率
-    
-    Args:
-        home_stats: 主队统计
-        away_stats: 客队统计
-        h2h: 历史对阵
-        home_cluster: 主队聚类
-        away_cluster: 客队聚类
-        weights: 权重配置
-        
-    Returns:
-        (主队胜率, 贡献因子)
-    """
-    base_prob = 0.5
-    contributions = {}
-    
-    # 1. 近期状态 (权重可调)
-    recent_weight = weights.get('recent_form', 0.25)
-    home_recent = home_stats.get('recent_5_win_pct', 0.5)
-    away_recent = away_stats.get('recent_5_win_pct', 0.5)
-    recent_diff = home_recent - away_recent
-    contributions['recent_form'] = {
-        'home': round(home_recent, 4),
-        'away': round(away_recent, 4),
-        'diff': round(recent_diff, 4),
-        'weight': recent_weight,
-        'contribution': round(recent_diff * recent_weight, 4)
+def _build_factor_item(
+    factor_type: str,
+    name: str,
+    description: str,
+    impact: float,
+    team: Optional[str] = None,
+) -> Dict[str, Any]:
+    return {
+        "type": factor_type,
+        "team": team,
+        "team_cn": TEAM_NAMES_CN.get(team, team) if team else None,
+        "name": name,
+        "description": description,
+        "impact": round(float(impact), 4),
+        "importance": round(abs(float(impact)), 4),
+        "contribution": round(float(impact), 4),
     }
-    base_prob += recent_diff * recent_weight
-    
-    # 2. 进攻效率 (包含在efficiency_diff中)
-    efficiency_weight = weights.get('efficiency_diff', 0.40)
-    home_off = home_stats.get('offensive_rating', 110)
-    away_off = away_stats.get('offensive_rating', 110)
-    off_diff = (home_off - away_off) / 100
-    
-    home_def = home_stats.get('defensive_rating', 110)
-    away_def = away_stats.get('defensive_rating', 110)
-    def_diff = (away_def - home_def) / 100  # 防守越好贡献越大
-    
-    # 综合效率 = 进攻贡献 + 防守贡献
-    net_diff = off_diff + def_diff
-    contributions['efficiency'] = {
-        'home_off': round(home_off, 1),
-        'away_off': round(away_off, 1),
-        'home_def': round(home_def, 1),
-        'away_def': round(away_def, 1),
-        'net_diff': round(net_diff, 4),
-        'weight': efficiency_weight,
-        'contribution': round(net_diff * efficiency_weight, 4)
-    }
-    base_prob += net_diff * efficiency_weight
-    
-    # 3. 主场优势 (权重可调)
-    home_weight = weights.get('home_advantage', 0.15)
-    home_home_win = home_stats.get('home_win_pct', 0.5)
-    home_adv = (home_home_win - 0.5) * 0.5  # 主场胜率超出50%的部分
-    contributions['home_advantage'] = {
-        'home_win_pct': round(home_home_win, 4),
-        'weight': home_weight,
-        'contribution': round(home_adv * home_weight, 4)
-    }
-    base_prob += home_adv * home_weight
-    
-    # 4. 历史交锋 (权重可调)
-    h2h_weight = weights.get('historical_matchup', 0.10)
-    if h2h and h2h['total'] > 0:
-        h2h_adv = (h2h['home_win_pct'] - 0.5) * 0.3
-        contributions['historical_matchup'] = {
-            'games': h2h['total'],
-            'home_win_pct': round(h2h['home_win_pct'], 4),
-            'weight': h2h_weight,
-            'contribution': round(h2h_adv * h2h_weight, 4)
-        }
-        base_prob += h2h_adv * h2h_weight
-    else:
-        contributions['historical_matchup'] = {
-            'games': 0,
-            'weight': h2h_weight,
-            'contribution': 0
-        }
-    
-    # 5. 聚类风格 (权重可调)
-    cluster_weight = weights.get('cluster_similarity', 0.10)
-    if home_cluster and away_cluster:
-        # 根据风格匹配调整
-        style_modifier = 0.02
-        contributions['style_matchup'] = {
-            'home_style': home_cluster.get('style', 'Unknown'),
-            'away_style': away_cluster.get('style', 'Unknown'),
-            'weight': cluster_weight,
-            'contribution': round(style_modifier * cluster_weight, 4)
-        }
-        base_prob += style_modifier * cluster_weight
-    else:
-        contributions['style_matchup'] = {
-            'weight': cluster_weight,
-            'contribution': 0
-        }
-    
-    # 限制概率范围
-    base_prob = max(0.15, min(0.85, base_prob))
-    
-    return base_prob, contributions
+
+
+def analyze_key_factors(
+    home_team: str,
+    away_team: str,
+    home_stats: Dict[str, Any],
+    away_stats: Dict[str, Any],
+    factors: Dict[str, Dict[str, float]],
+) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+
+    if abs(factors["efficiency_diff"]["contribution"]) > 0.01:
+        better_team = home_team if factors["efficiency_diff"]["contribution"] >= 0 else away_team
+        better_name = TEAM_INFO.get(better_team, {}).get("name", better_team)
+        items.append(
+            _build_factor_item(
+                "efficiency",
+                "Efficiency edge",
+                f"{better_name} owns the stronger efficiency profile entering this matchup",
+                factors["efficiency_diff"]["contribution"],
+                better_team,
+            )
+        )
+
+    if abs(factors["recent_form"]["contribution"]) > 0.01:
+        better_team = home_team if factors["recent_form"]["contribution"] >= 0 else away_team
+        better_name = TEAM_INFO.get(better_team, {}).get("name", better_team)
+        items.append(
+            _build_factor_item(
+                "form",
+                "Recent form",
+                f"{better_name} has the stronger recent win-rate trend",
+                factors["recent_form"]["contribution"],
+                better_team,
+            )
+        )
+
+    if abs(factors["home_advantage"]["contribution"]) > 0.01:
+        items.append(
+            _build_factor_item(
+                "home",
+                "Home/road split",
+                f"{TEAM_INFO.get(home_team, {}).get('name', home_team)} gets a home-court boost from recent split performance",
+                factors["home_advantage"]["contribution"],
+                home_team,
+            )
+        )
+
+    if abs(factors["historical_matchup"]["contribution"]) > 0.005:
+        better_team = home_team if factors["historical_matchup"]["contribution"] >= 0 else away_team
+        better_name = TEAM_INFO.get(better_team, {}).get("name", better_team)
+        items.append(
+            _build_factor_item(
+                "history",
+                "Head-to-head",
+                f"Recent head-to-head history tilts toward {better_name}",
+                factors["historical_matchup"]["contribution"],
+                better_team,
+            )
+        )
+
+    if abs(factors["cluster_similarity"]["contribution"]) > 0.005:
+        better_team = home_team if factors["cluster_similarity"]["contribution"] >= 0 else away_team
+        items.append(
+            _build_factor_item(
+                "style",
+                "Style matchup",
+                "Historical style strength slightly shifts the matchup balance",
+                factors["cluster_similarity"]["contribution"],
+                better_team,
+            )
+        )
+
+    items = sorted(items, key=lambda item: abs(item["impact"]), reverse=True)
+    return items[:5]
+
+
+def analyze_key_factors_advanced(
+    home_team: str,
+    away_team: str,
+    home_stats: Dict[str, Any],
+    away_stats: Dict[str, Any],
+    contributions: Dict[str, Dict[str, float]],
+    home_params: Dict[str, Any],
+    away_params: Dict[str, Any],
+    adjustments_summary: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
+    factors = analyze_key_factors(home_team, away_team, home_stats, away_stats, contributions)
+
+    for adjustment in adjustments_summary or []:
+        effect = _safe_float(adjustment.get("effect"))
+        if abs(effect) < 1e-9:
+            continue
+        factors.append(
+            _build_factor_item(
+                "adjustment",
+                adjustment.get("name", "Adjustment"),
+                adjustment.get("description", "Manual matchup adjustment"),
+                effect,
+                home_team if effect >= 0 else away_team,
+            )
+        )
+
+    for team_key, params in ((home_team, home_params), (away_team, away_params)):
+        if params.get("key_player_out"):
+            factors.append(
+                _build_factor_item(
+                    "availability",
+                    "Key player availability",
+                    f"{TEAM_INFO.get(team_key, {}).get('name', team_key)} missing: {', '.join(params['key_player_out'])}",
+                    -0.015 if team_key == home_team else 0.015,
+                    team_key,
+                )
+            )
+
+    factors = sorted(factors, key=lambda item: abs(item["impact"]), reverse=True)
+    return factors[:6]
+
+
+def determine_confidence(
+    home_win_prob: float,
+    key_factors: List[Dict[str, Any]],
+    h2h: Dict[str, Any],
+) -> str:
+    certainty = abs(home_win_prob - 0.5) * 2.0
+    factor_support = min(sum(abs(f["impact"]) for f in key_factors[:3]) / 0.18, 1.0)
+    history_support = min(_safe_float(h2h.get("total")) / 8.0, 1.0) if h2h else 0.0
+    score = 0.55 * certainty + 0.30 * factor_support + 0.15 * history_support
+
+    if score >= 0.72:
+        return "HIGH"
+    if score >= 0.45:
+        return "MEDIUM"
+    return "LOW"
+
+
+def determine_confidence_advanced(
+    home_win_prob: float,
+    key_factors: List[Dict[str, Any]],
+    h2h: Dict[str, Any],
+    adjustments: Dict[str, Any],
+) -> str:
+    base = determine_confidence(home_win_prob, key_factors, h2h)
+    adjustment_count = len(adjustments.get("summary", []))
+    certainty = abs(home_win_prob - 0.5) * 2.0
+    if base == "LOW" and certainty > 0.28 and adjustment_count >= 2:
+        return "MEDIUM"
+    return base
+
+
+def _predict_margin(home_stats: Dict[str, Any], away_stats: Dict[str, Any], home_win_prob: float) -> float:
+    point_diff_edge = _safe_float(home_stats.get("point_diff_avg")) - _safe_float(away_stats.get("point_diff_avg"))
+    net_edge = _safe_float(home_stats.get("net_rating")) - _safe_float(away_stats.get("net_rating"))
+    probability_edge = (home_win_prob - 0.5) * 18.0
+    margin = 0.55 * point_diff_edge + 0.35 * net_edge + probability_edge
+    return float(np.clip(margin, -22.0, 22.0))
+
+
+def _format_team_name(team_abbr: str) -> str:
+    return TEAM_INFO.get(team_abbr, {}).get("name", team_abbr)
+
+
+def predict_game(home_team: str, away_team: str) -> Dict[str, Any]:
+    return predict_game_advanced(
+        home_team=home_team,
+        away_team=away_team,
+        home_params=None,
+        away_params=None,
+        weights=None,
+        season=None,
+        use_recent_form=True,
+        return_details=True,
+    )
 
 
 def predict_game_advanced(
@@ -904,565 +933,284 @@ def predict_game_advanced(
     weights: Optional[Dict] = None,
     season: Optional[str] = None,
     use_recent_form: bool = True,
-    return_details: bool = True
-) -> Dict:
-    """
-    高级比赛预测接口 - 支持实时参数传入
-    
-    Args:
-        home_team: 主队缩写 (如 'LAL')
-        away_team: 客队缩写 (如 'BOS')
-        home_params: 主队实时参数 (可选)
-            - recent_win_pct: 近期胜率 (0-1)
-            - home_advantage: 主场加成 (-0.1 to 0.1)
-            - injury_impact: 伤病影响 (-0.3 to 0)
-            - rest_days: 休息天数 (>=0)
-            - back_to_back: 是否背靠背
-            - key_player_out: 缺阵球员列表
-            - morale_boost: 士气加成 (-0.15 to 0.15)
-            - custom_rating: 自定义实力评分 (0-100)
-        away_params: 客队实时参数 (同上)
-        weights: 权重配置 (可选)
-            - recent_form: 近期状态权重
-            - home_advantage: 主场优势权重
-            - historical_matchup: 历史交锋权重
-            - efficiency_diff: 效率差权重
-            - cluster_similarity: 风格相似度权重
-        season: 赛季 (可选, 如 '2024-25')
-        use_recent_form: 是否使用近期战绩 (默认True)
-        return_details: 返回详细信息 (默认True)
-        
-    Returns:
-        预测结果字典
-    """
-    print(f"\n{'='*60}")
-    print(f"高级预测: {home_team} (主场) vs {away_team} (客场)")
-    print(f"{'='*60}")
-    
-    # 参数验证
+    return_details: bool = True,
+) -> Dict[str, Any]:
     if home_params:
-        valid, msg = validate_params(home_params, 'home')
+        valid, message = validate_params(home_params, "home")
         if not valid:
-            raise ValueError(f"主队参数错误: {msg}")
-    
+            raise ValueError(message)
     if away_params:
-        valid, msg = validate_params(away_params, 'away')
+        valid, message = validate_params(away_params, "away")
         if not valid:
-            raise ValueError(f"客队参数错误: {msg}")
-    
+            raise ValueError(message)
     if weights:
-        valid, msg = validate_weights(weights)
+        valid, message = validate_weights(weights)
         if not valid:
-            raise ValueError(f"权重配置错误: {msg}")
-    
-    # 合并参数
-    merged_home_params = merge_params(DEFAULT_HOME_PARAMS, home_params)
-    merged_away_params = merge_params(DEFAULT_AWAY_PARAMS, away_params)
-    merged_weights = {**DEFAULT_WEIGHTS, **(weights or {})}
-    
-    print(f"\n📋 参数配置:")
-    print(f"   主队参数: {merged_home_params}")
-    print(f"   客队参数: {merged_away_params}")
-    print(f"   权重配置: {merged_weights}")
-    
-    # 加载数据
-    team_features, team_clusters, games = load_data()
-    
-    # 标准化球队名称
+            raise ValueError(message)
+
     home_team = normalize_team(home_team)
     away_team = normalize_team(away_team)
-    
-    # 获取球队统计
-    home_stats = get_team_latest_stats(home_team, team_features, season)
-    away_stats = get_team_latest_stats(away_team, team_features, season)
-    
-    # 获取聚类信息
-    home_cluster = get_team_cluster(home_team, team_clusters)
-    away_cluster = get_team_cluster(away_team, team_clusters)
-    
-    # 获取历史对阵
+
+    team_features, team_clusters, games = load_data()
+    default_stats = _default_team_row(team_features)
+    selected_season = get_latest_season(season)
+
+    home_stats = {**default_stats, **get_team_latest_stats(home_team, team_features, selected_season)}
+    away_stats = {**default_stats, **get_team_latest_stats(away_team, team_features, selected_season)}
+    home_stats["season"] = home_stats.get("season", selected_season)
+    away_stats["season"] = away_stats.get("season", selected_season)
+
+    merged_home_params = merge_params(DEFAULT_HOME_PARAMS, home_params)
+    merged_away_params = merge_params(DEFAULT_AWAY_PARAMS, away_params)
+    normalized_weights = _normalize_weights(weights)
+
+    if use_recent_form:
+        if merged_home_params.get("recent_win_pct") is not None:
+            home_stats["recent_5_win_pct"] = merged_home_params["recent_win_pct"]
+        if merged_away_params.get("recent_win_pct") is not None:
+            away_stats["recent_5_win_pct"] = merged_away_params["recent_win_pct"]
+
+    if merged_home_params.get("home_advantage") is not None:
+        home_stats["home_win_pct"] = np.clip(
+            _safe_float(home_stats.get("home_win_pct"), 0.55) + _safe_float(merged_home_params["home_advantage"]),
+            0.25,
+            0.85,
+        )
+
+    home_cluster = get_team_cluster(home_team, team_clusters, selected_season)
+    away_cluster = get_team_cluster(away_team, team_clusters, selected_season)
     h2h = get_head_to_head(home_team, away_team, games)
-    
-    # 检查数据完整性
-    if not home_stats:
-        print(f"[警告] 未找到 {home_team} 的统计数据，使用默认值")
-        home_stats = {
-            'win_pct': 0.5, 'home_win_pct': 0.5, 'offensive_rating': 110,
-            'defensive_rating': 110, 'recent_5_win_pct': 0.5
-        }
-    if not away_stats:
-        print(f"[警告] 未找到 {away_team} 的统计数据，使用默认值")
-        away_stats = {
-            'win_pct': 0.5, 'away_win_pct': 0.5, 'offensive_rating': 110,
-            'defensive_rating': 110, 'recent_5_win_pct': 0.5
-        }
-    
-    # 应用自定义近期胜率
-    if merged_home_params.get('recent_win_pct') is not None and use_recent_form:
-        home_stats['recent_5_win_pct'] = merged_home_params['recent_win_pct']
-    if merged_away_params.get('recent_win_pct') is not None and use_recent_form:
-        away_stats['recent_5_win_pct'] = merged_away_params['recent_win_pct']
-    
-    # 应用自定义主场加成
-    if merged_home_params.get('home_advantage') is not None:
-        home_stats['home_win_pct'] = 0.5 + merged_home_params['home_advantage']
-    
-    # 计算基础胜率（使用可配置权重）
-    base_prob, contributions = calculate_weighted_probability(
-        home_stats, away_stats, h2h, home_cluster, away_cluster, merged_weights
+
+    model = _build_strength_model(team_features, selected_season)
+    home_strength = _predict_strength(home_stats, model)
+    away_strength = _predict_strength(away_stats, model)
+
+    base_edge, contributions = _compose_factor_breakdown(
+        home_stats,
+        away_stats,
+        normalized_weights,
+        model,
+        h2h,
+        home_cluster,
+        away_cluster,
     )
-    
-    print(f"\n📊 基础胜率计算: {base_prob:.4f}")
-    print(f"   各因子贡献: {contributions}")
-    
-    # 应用实时参数调整
-    adjusted_prob, adjustments = apply_realtime_adjustments(
-        base_prob, merged_home_params, merged_away_params, merged_weights
+    base_probability = float(
+        np.clip(_sigmoid(model["calibration_intercept"] + model["calibration_slope"] * base_edge), 0.05, 0.95)
     )
-    
-    print(f"\n🔧 实时调整后胜率: {adjusted_prob:.4f}")
-    for adj_name, adj_info in adjustments.items():
-        print(f"   {adj_name}: {adj_info.get('description', '')}")
-    
-    # 分析关键因素
+
+    adjusted_edge, adjustments = apply_realtime_adjustments(
+        base_edge,
+        merged_home_params,
+        merged_away_params,
+        model,
+        home_strength,
+        away_strength,
+    )
+
+    home_win_probability = float(
+        np.clip(_sigmoid(model["calibration_intercept"] + model["calibration_slope"] * adjusted_edge), 0.05, 0.95)
+    )
+    away_win_probability = 1.0 - home_win_probability
+    predicted_winner = home_team if home_win_probability >= 0.5 else away_team
+    predicted_margin = _predict_margin(home_stats, away_stats, home_win_probability)
+    if predicted_winner == away_team:
+        predicted_margin = -abs(predicted_margin)
+    else:
+        predicted_margin = abs(predicted_margin)
+
     key_factors = analyze_key_factors_advanced(
-        home_team, away_team, home_stats, away_stats, 
-        contributions, merged_home_params, merged_away_params
+        home_team,
+        away_team,
+        home_stats,
+        away_stats,
+        contributions,
+        merged_home_params,
+        merged_away_params,
+        adjustments.get("summary", []),
     )
-    
-    # 确定置信度
-    confidence = determine_confidence_advanced(adjusted_prob, key_factors, h2h, adjustments)
-    
-    # 最终预测
-    predicted_winner = home_team if adjusted_prob > 0.5 else away_team
-    predicted_winner_cn = TEAM_NAMES_CN.get(predicted_winner, predicted_winner)
-    home_win_prob = adjusted_prob
-    away_win_prob = 1 - adjusted_prob
-    
-    # 构建结果
-    result = {
-        'prediction_id': f"ADV-{datetime.now().strftime('%Y%m%d%H%M%S')}",
-        'prediction_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'home_team': home_team,
-        'home_team_cn': TEAM_NAMES_CN.get(home_team, home_team),
-        'away_team': away_team,
-        'away_team_cn': TEAM_NAMES_CN.get(away_team, away_team),
-        'predicted_winner': predicted_winner,
-        'predicted_winner_cn': predicted_winner_cn,
-        'home_win_probability': round(home_win_prob, 4),
-        'away_win_probability': round(away_win_prob, 4),
-        'confidence_level': confidence,
-        'key_factors': key_factors,
+    confidence_level = determine_confidence_advanced(
+        home_win_probability,
+        key_factors,
+        h2h,
+        adjustments,
+    )
+
+    result: Dict[str, Any] = {
+        "prediction_id": f"ADV-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+        "prediction_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "season": selected_season,
+        "home_team": home_team,
+        "home_team_name": _format_team_name(home_team),
+        "home_team_cn": TEAM_NAMES_CN.get(home_team, _format_team_name(home_team)),
+        "away_team": away_team,
+        "away_team_name": _format_team_name(away_team),
+        "away_team_cn": TEAM_NAMES_CN.get(away_team, _format_team_name(away_team)),
+        "predicted_winner": predicted_winner,
+        "predicted_winner_name": _format_team_name(predicted_winner),
+        "predicted_winner_cn": TEAM_NAMES_CN.get(predicted_winner, _format_team_name(predicted_winner)),
+        "home_win_probability": round(home_win_probability, 4),
+        "away_win_probability": round(away_win_probability, 4),
+        "predicted_margin": round(predicted_margin, 1),
+        "margin_range": [round(predicted_margin - 4.5, 1), round(predicted_margin + 4.5, 1)],
+        "confidence_level": confidence_level,
+        "key_factors": key_factors,
     }
-    
+
     if return_details:
-        # 添加详细信息
-        result['model_inputs'] = {
-            'home_stats': {k: round(v, 2) if isinstance(v, float) else v 
-                          for k, v in home_stats.items() if isinstance(v, (int, float))},
-            'away_stats': {k: round(v, 2) if isinstance(v, float) else v 
-                          for k, v in away_stats.items() if isinstance(v, (int, float))},
-            'weights_used': merged_weights,
+        result["model_inputs"] = {
+            "weights_used": normalized_weights,
+            "home_strength": round(home_strength, 4),
+            "away_strength": round(away_strength, 4),
+            "training_rows": model.get("training_rows", 0),
         }
-        
-        result['adjustments_applied'] = {
-            'base_probability': round(base_prob, 4),
-            'final_probability': round(adjusted_prob, 4),
-            'adjustment_details': adjustments,
-            'contributions': contributions,
+        result["home_stats"] = {
+            key: round(_safe_float(value), 4) if isinstance(value, (int, float, np.number)) else value
+            for key, value in home_stats.items()
+            if key in MODEL_FEATURES or key in {"win_pct", "style", "season"}
         }
-        
-        result['realtime_params'] = {
-            'home_params': merged_home_params,
-            'away_params': merged_away_params,
+        result["away_stats"] = {
+            key: round(_safe_float(value), 4) if isinstance(value, (int, float, np.number)) else value
+            for key, value in away_stats.items()
+            if key in MODEL_FEATURES or key in {"win_pct", "style", "season"}
         }
-        
-        result['head_to_head'] = h2h
-        result['home_cluster'] = home_cluster.get('style') if home_cluster else None
-        result['away_cluster'] = away_cluster.get('style') if away_cluster else None
-    
-    # 打印结果
-    print(f"\n📊 最终预测:")
-    print(f"   {home_team} ({result['home_team_cn']}) 主场胜率: {home_win_prob*100:.1f}%")
-    print(f"   {away_team} ({result['away_team_cn']}) 客场胜率: {away_win_prob*100:.1f}%")
-    print(f"   预测获胜: {predicted_winner} ({predicted_winner_cn})")
-    print(f"   置信度: {confidence}")
-    
-    if key_factors:
-        print(f"\n🔑 关键因素:")
-        for i, factor in enumerate(key_factors, 1):
-            print(f"   {i}. {factor['description']}")
-    
+        result["adjustments_applied"] = {
+            **adjustments,
+            "contributions": {
+                key: {
+                    "edge": round(values["edge"], 4),
+                    "weight": round(values["weight"], 4),
+                    "contribution": round(values["contribution"], 4),
+                }
+                for key, values in contributions.items()
+            },
+            "base_probability": round(base_probability, 4),
+        }
+        result["head_to_head"] = h2h
+        result["home_cluster"] = (home_cluster or {}).get("style") or home_stats.get("style")
+        result["away_cluster"] = (away_cluster or {}).get("style") or away_stats.get("style")
+        result["feature_importance"] = model.get("feature_importance", [])[:8]
+
+    print(
+        f"[Predict] {home_team} vs {away_team} | "
+        f"home={home_win_probability:.3f} away={away_win_probability:.3f} "
+        f"winner={predicted_winner} margin={predicted_margin:.1f}"
+    )
+
     return result
 
 
-def analyze_key_factors_advanced(
-    home_team: str,
-    away_team: str,
-    home_stats: Dict,
-    away_stats: Dict,
-    contributions: Dict,
-    home_params: Dict,
-    away_params: Dict
-) -> List[Dict]:
-    """
-    分析关键因素（支持实时参数版本）
-    
-    Args:
-        home_team: 主队
-        away_team: 客队
-        home_stats: 主队统计
-        away_stats: 客队统计
-        contributions: 因子贡献
-        home_params: 主队实时参数
-        away_params: 客队实时参数
-        
-    Returns:
-        关键因素列表
-    """
-    key_factors = []
-    
-    home_cn = TEAM_NAMES_CN.get(normalize_team(home_team), home_team)
-    away_cn = TEAM_NAMES_CN.get(normalize_team(away_team), away_team)
-    
-    # 1. 进攻效率
-    home_off = home_stats.get('offensive_rating', 0)
-    away_off = away_stats.get('offensive_rating', 0)
-    if abs(home_off - away_off) > 2:
-        winner = home_team if home_off > away_off else away_team
-        winner_cn = home_cn if home_off > away_off else away_cn
-        key_factors.append({
-            'type': 'offense',
-            'team': winner,
-            'team_cn': winner_cn,
-            'description': f'{winner_cn}进攻效率更优 ({max(home_off, away_off):.1f} vs {min(home_off, away_off):.1f})',
-            'importance': abs(home_off - away_off) / 5,
-            'contribution': contributions.get('efficiency', {}).get('contribution', 0)
-        })
-    
-    # 2. 防守效率
-    home_def = home_stats.get('defensive_rating', 0)
-    away_def = away_stats.get('defensive_rating', 0)
-    if abs(home_def - away_def) > 2:
-        winner = home_team if home_def < away_def else away_team
-        winner_cn = home_cn if home_def < away_def else away_cn
-        key_factors.append({
-            'type': 'defense',
-            'team': winner,
-            'team_cn': winner_cn,
-            'description': f'{winner_cn}防守更稳固 ({min(home_def, away_def):.1f} vs {max(home_def, away_def):.1f})',
-            'importance': abs(home_def - away_def) / 5,
-            'contribution': contributions.get('efficiency', {}).get('contribution', 0)
-        })
-    
-    # 3. 近期状态
-    home_recent = home_stats.get('recent_5_win_pct', 0.5)
-    away_recent = away_stats.get('recent_5_win_pct', 0.5)
-    if abs(home_recent - away_recent) > 0.1:
-        winner = home_team if home_recent > away_recent else away_team
-        winner_cn = home_cn if home_recent > away_recent else away_cn
-        key_factors.append({
-            'type': 'form',
-            'team': winner,
-            'team_cn': winner_cn,
-            'description': f'{winner_cn}近期状态更佳 ({(max(home_recent, away_recent)*100):.0f}% vs {(min(home_recent, away_recent)*100):.0f}%)',
-            'importance': abs(home_recent - away_recent) * 5,
-            'contribution': contributions.get('recent_form', {}).get('contribution', 0)
-        })
-    
-    # 4. 主场优势
-    home_home_win = home_stats.get('home_win_pct', 0.5)
-    if home_home_win > 0.55:
-        key_factors.append({
-            'type': 'home',
-            'team': home_team,
-            'team_cn': home_cn,
-            'description': f'{home_cn}主场强势 ({home_home_win*100:.0f}%胜率)',
-            'importance': (home_home_win - 0.5) * 3,
-            'contribution': contributions.get('home_advantage', {}).get('contribution', 0)
-        })
-    
-    # 5. 伤病影响（实时参数）
-    if home_params.get('injury_impact', 0) != 0:
-        key_factors.append({
-            'type': 'injury',
-            'team': home_team,
-            'team_cn': home_cn,
-            'description': f'{home_cn}受到伤病影响 ({home_params["injury_impact"]:.2f})',
-            'importance': abs(home_params['injury_impact']) * 10,
-            'contribution': home_params['injury_impact']
-        })
-    
-    if away_params.get('injury_impact', 0) != 0:
-        key_factors.append({
-            'type': 'injury',
-            'team': away_team,
-            'team_cn': away_cn,
-            'description': f'{away_cn}受到伤病影响 ({away_params["injury_impact"]:.2f})',
-            'importance': abs(away_params['injury_impact']) * 10,
-            'contribution': away_params['injury_impact']
-        })
-    
-    # 6. 背靠背（实时参数）
-    if home_params.get('back_to_back', False):
-        key_factors.append({
-            'type': 'fatigue',
-            'team': home_team,
-            'team_cn': home_cn,
-            'description': f'{home_cn}背靠背出战，体能堪忧',
-            'importance': 2,
-            'contribution': -0.02
-        })
-    
-    if away_params.get('back_to_back', False):
-        key_factors.append({
-            'type': 'fatigue',
-            'team': away_team,
-            'team_cn': away_cn,
-            'description': f'{away_cn}背靠背出战，体能堪忧',
-            'importance': 2,
-            'contribution': 0.02
-        })
-    
-    # 7. 休息天数（实时参数）
-    rest_diff = home_params.get('rest_days', 2) - away_params.get('rest_days', 2)
-    if abs(rest_diff) >= 2:
-        winner = home_team if rest_diff > 0 else away_team
-        winner_cn = home_cn if rest_diff > 0 else away_cn
-        key_factors.append({
-            'type': 'rest',
-            'team': winner,
-            'team_cn': winner_cn,
-            'description': f'{winner_cn}休息更充足 ({home_params.get("rest_days", 2)}天 vs {away_params.get("rest_days", 2)}天)',
-            'importance': abs(rest_diff) * 1.5,
-            'contribution': rest_diff * 0.015
-        })
-    
-    # 按重要性排序
-    key_factors = sorted(key_factors, key=lambda x: x['importance'], reverse=True)
-    
-    return key_factors[:6]
+def batch_predict(matchups: List[Tuple[str, str]]) -> List[Dict[str, Any]]:
+    results: List[Dict[str, Any]] = []
+    for home_team, away_team in matchups:
+        try:
+            results.append(predict_game(home_team, away_team))
+        except Exception as exc:
+            results.append({"home_team": home_team, "away_team": away_team, "error": str(exc)})
+    return results
 
 
-def determine_confidence_advanced(
-    home_win_prob: float,
-    key_factors: List[Dict],
-    h2h: Dict,
-    adjustments: Dict
-) -> str:
-    """
-    确定预测置信度（支持实时参数版本）
-    
-    Args:
-        home_win_prob: 主队胜率
-        key_factors: 关键因素
-        h2h: 对阵记录
-        adjustments: 实时调整详情
-        
-    Returns:
-        置信度等级 (HIGH/MEDIUM/LOW)
-    """
-    # 计算概率偏向程度
-    prob_swing = abs(home_win_prob - 0.5) * 2  # 0-1范围
-    
-    # 因子数量和一致性
-    factor_count = len(key_factors)
-    
-    # 因子贡献总和
-    total_contribution = sum(abs(f.get('contribution', 0)) for f in key_factors)
-    
-    # 实时调整强度
-    adjustment_count = sum(1 for adj in adjustments.values() 
-                           if adj.get('effect', 0) != 0)
-    adjustment_strength = min(1, adjustment_count * 0.15)
-    
-    # 历史数据支持度
-    h2h_support = 0
-    if h2h and h2h['total'] >= 3:
-        h2h_support = min(0.2, h2h['total'] * 0.03)
-    
-    # 综合评分
-    confidence_score = (
-        prob_swing * 0.3 +
-        min(factor_count / 5, 1) * 0.25 +
-        min(total_contribution, 0.5) * 0.2 +
-        adjustment_strength * 0.1 +
-        h2h_support * 0.15
-    )
-    
-    if confidence_score > 0.65:
-        return "HIGH"
-    elif confidence_score > 0.40:
-        return "MEDIUM"
-    else:
-        return "LOW"
+def get_model_diagnostics(season: Optional[str] = None) -> Dict[str, Any]:
+    team_features, _, _ = load_data()
+    if team_features.empty:
+        return {
+            "pairwise_accuracy": 0.0,
+            "quality_mae": 0.0,
+            "samples": 0,
+            "season_breakdown": [],
+            "feature_importance": [],
+        }
+
+    seasons = sorted(team_features["season"].dropna().unique(), key=season_to_key)
+    backtest_rows: List[Dict[str, Any]] = []
+    total_correct = 0
+    total_samples = 0
+    mae_values: List[float] = []
+
+    for target_season in seasons[1:]:
+        model = _build_strength_model(team_features, target_season)
+        target_rows = team_features[team_features["season"] == target_season].copy()
+        if len(target_rows) < 2:
+            continue
+
+        target_rows["predicted_strength"] = target_rows.apply(
+            lambda row: _predict_strength(row.to_dict(), model),
+            axis=1,
+        )
+        mae = float(np.mean(np.abs(target_rows["predicted_strength"] - target_rows["win_pct"])))
+        mae_values.append(mae)
+
+        correct = 0
+        samples = 0
+        records = target_rows.to_dict("records")
+        for left, right in combinations(records, 2):
+            if abs(_safe_float(left.get("win_pct")) - _safe_float(right.get("win_pct"))) < 1e-9:
+                continue
+            edge, _ = _compose_factor_breakdown(
+                left,
+                right,
+                _normalize_weights(None),
+                model,
+                {"total": 0, "home_win_pct": 0.5},
+                {"style": left.get("style")},
+                {"style": right.get("style")},
+                include_home_edge=True,
+            )
+            predicted_home = _sigmoid(model["calibration_intercept"] + model["calibration_slope"] * edge) >= 0.5
+            actual_home = _safe_float(left.get("win_pct")) > _safe_float(right.get("win_pct"))
+            correct += int(predicted_home == actual_home)
+            samples += 1
+
+        if samples:
+            total_correct += correct
+            total_samples += samples
+            backtest_rows.append(
+                {
+                    "season": target_season,
+                    "pairwise_accuracy": round(correct / samples, 4),
+                    "quality_mae": round(mae, 4),
+                    "samples": samples,
+                }
+            )
+
+    latest_model = _build_strength_model(team_features, season)
+    pairwise_accuracy = round(total_correct / total_samples, 4) if total_samples else 0.0
+    quality_mae = round(float(np.mean(mae_values)), 4) if mae_values else 0.0
+
+    return {
+        "pairwise_accuracy": pairwise_accuracy,
+        "quality_mae": quality_mae,
+        "samples": total_samples,
+        "season_breakdown": backtest_rows,
+        "feature_importance": latest_model.get("feature_importance", [])[:8],
+    }
 
 
-def visualize_prediction(result: Dict):
+def visualize_prediction(result: Dict[str, Any]) -> Optional[Path]:
     """
-    生成预测结果可视化
-    
-    Args:
-        result: 预测结果字典
+    Kept for compatibility with older scripts.
+
+    The web UI now handles visualization directly, so this function simply
+    returns ``None`` instead of generating a static image dependency.
     """
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    
-    # 1. 胜率对比图
-    ax1 = axes[0]
-    teams = [result['home_team'], result['away_team']]
-    probs = [result['home_win_probability'] * 100, result['away_win_probability'] * 100]
-    colors = ['#4ECDC4', '#FF6B6B']
-    
-    bars = ax1.bar(teams, probs, color=colors, edgecolor='white', linewidth=2)
-    ax1.axhline(y=50, color='gray', linestyle='--', alpha=0.7)
-    ax1.set_ylabel('Win Probability (%)', fontsize=12)
-    ax1.set_title('Win Probability Comparison', fontsize=14, fontweight='bold')
-    ax1.set_ylim(0, 100)
-    
-    # 添加数值标签
-    for bar, prob in zip(bars, probs):
-        ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 2,
-                f'{prob:.1f}%', ha='center', fontsize=11, fontweight='bold')
-    
-    # 2. 关键指标雷达图
-    ax2 = axes[1]
-    ax2 = plt.subplot(132, polar=True)
-    
-    # 选择关键指标
-    stats_labels = ['Points', 'Offense', 'Defense', 'Net Rating', 'eFG%']
-    
-    home_vals = [
-        result['home_stats'].get('recent_5_avg_points', 0) / 2,  # 标准化
-        result['home_stats'].get('offensive_rating', 110) / 2,
-        120 - result['home_stats'].get('defensive_rating', 110),  # 反转（越小越好）
-        result['home_stats'].get('net_rating', 0) + 10,  # 偏移到正数
-        result['home_stats'].get('effective_fg_pct', 0.5) * 100
-    ]
-    
-    away_vals = [
-        result['away_stats'].get('recent_5_avg_points', 0) / 2,
-        result['away_stats'].get('offensive_rating', 110) / 2,
-        120 - result['away_stats'].get('defensive_rating', 110),
-        result['away_stats'].get('net_rating', 0) + 10,
-        result['away_stats'].get('effective_fg_pct', 0.5) * 100
-    ]
-    
-    # 归一化到0-100
-    max_vals = [max(h, a) for h, a in zip(home_vals, away_vals)]
-    min_vals = [min(h, a) for h, a in zip(home_vals, away_vals)]
-    
-    for i in range(len(home_vals)):
-        if max_vals[i] > min_vals[i]:
-            home_vals[i] = (home_vals[i] - min_vals[i]) / (max_vals[i] - min_vals[i]) * 100
-            away_vals[i] = (away_vals[i] - min_vals[i]) / (max_vals[i] - min_vals[i]) * 100
-        else:
-            home_vals[i] = 50
-            away_vals[i] = 50
-    
-    angles = np.linspace(0, 2 * np.pi, len(stats_labels), endpoint=False).tolist()
-    angles += angles[:1]
-    home_vals += home_vals[:1]
-    away_vals += away_vals[:1]
-    
-    ax2.plot(angles, home_vals, 'o-', linewidth=2, label=result['home_team'], color='#4ECDC4')
-    ax2.fill(angles, home_vals, alpha=0.25, color='#4ECDC4')
-    ax2.plot(angles, away_vals, 'o-', linewidth=2, label=result['away_team'], color='#FF6B6B')
-    ax2.fill(angles, away_vals, alpha=0.25, color='#FF6B6B')
-    
-    ax2.set_xticks(angles[:-1])
-    ax2.set_xticklabels(stats_labels, fontsize=10)
-    ax2.set_ylim(0, 100)
-    ax2.legend(loc='upper right', bbox_to_anchor=(1.3, 1.0))
-    ax2.set_title('Team Stats Comparison', fontsize=14, fontweight='bold', pad=20)
-    
-    # 3. 关键因素重要性
-    ax3 = axes[2]
-    
-    if result['key_factors']:
-        factors = [f['description'][:25] + '...' if len(f['description']) > 25 
-                  else f['description'] for f in result['key_factors'][:5]]
-        importance = [f['importance'] for f in result['key_factors'][:5]]
-        
-        colors_factor = ['#96CEB4' if f['team'] == result['home_team'] else '#DDA0DD' 
-                        for f in result['key_factors'][:5]]
-        
-        y_pos = np.arange(len(factors))
-        ax3.barh(y_pos, importance, color=colors_factor, edgecolor='white')
-        ax3.set_yticks(y_pos)
-        ax3.set_yticklabels(factors, fontsize=10)
-        ax3.set_xlabel('Importance', fontsize=12)
-        ax3.set_title('Key Factors', fontsize=14, fontweight='bold')
-        
-        # 添加图例
-        from matplotlib.patches import Patch
-        legend_elements = [
-            Patch(facecolor='#96CEB4', label=result['home_team']),
-            Patch(facecolor='#DDA0DD', label=result['away_team'])
-        ]
-        ax3.legend(handles=legend_elements, loc='lower right')
-    else:
-        ax3.text(0.5, 0.5, 'No key factors available',
-                ha='center', va='center', fontsize=12)
-        ax3.set_title('Key Factors', fontsize=14, fontweight='bold')
-    
-    plt.tight_layout()
-    
-    # 保存图片
-    filename = f"prediction_{result['home_team']}_vs_{result['away_team']}.png"
-    filepath = OUTPUT_DIR / filename
-    plt.savefig(filepath, dpi=150, bbox_inches='tight')
-    plt.close()
-    
-    print(f"\n📊 预测图表已保存: {filepath}")
-    
-    return filepath
+
+    del result
+    return None
 
 
-def run_demo_predictions():
-    """
-    运行演示预测
-    """
-    print("\n" + "=" * 60)
-    print("NBA比赛预测系统 - 演示预测")
-    print("=" * 60)
-    
-    # 加载数据
-    team_features, team_clusters, games = load_data()
-    
-    # 获取当前有数据的球队
-    if len(team_features) > 0:
-        available_teams = team_features['team_abbr'].unique()[:10]
-    else:
-        available_teams = ['LAL', 'GSW', 'BOS', 'MIA', 'DEN']
-    
-    print(f"\n可用球队: {', '.join(sorted(available_teams))}")
-    
-    # 预设几场经典对决
+def run_demo_predictions() -> List[Dict[str, Any]]:
+    profiles = load_team_features_frame()
+    if profiles.empty:
+        return []
+
+    latest_season = get_latest_season()
+    latest_profiles = profiles[profiles["season"] == latest_season].sort_values("win_pct", ascending=False)
+    teams = latest_profiles["team_abbr"].tolist()
+    if len(teams) < 6:
+        return []
+
     demo_matchups = [
-        ('LAL', 'BOS'),   # 湖人 vs 凯尔特人
-        ('GSW', 'PHO'),  # 勇士 vs 太阳
-        ('DEN', 'MIN'),  # 掘金 vs 森林狼
-        ('MIA', 'BOS'),  # 热火 vs 凯尔特人
-        ('DAL', 'LAC'),  # 独行侠 vs 快船
+        (teams[0], teams[1]),
+        (teams[2], teams[3]),
+        (teams[4], teams[5]),
     ]
-    
-    # 过滤有效对阵
-    valid_matchups = [(h, a) for h, a in demo_matchups 
-                     if h in available_teams or a in available_teams]
-    
-    if valid_matchups:
-        results = batch_predict(valid_matchups[:3])  # 限制3场
-        
-        # 生成可视化
-        for result in results:
-            if 'prediction_id' in result:
-                visualize_prediction(result)
-        
-        return results
-    
-    return []
-
-
-if __name__ == "__main__":
-    # 运行演示预测
-    results = run_demo_predictions()
+    return batch_predict(demo_matchups)

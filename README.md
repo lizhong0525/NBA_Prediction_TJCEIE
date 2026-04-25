@@ -1,290 +1,213 @@
-# NBA比赛预测系统
+# NBA 比赛结果预测系统
 
-基于15年NBA历史数据，使用机器学习（K-Means聚类、PCA降维）进行比赛预测的Web系统。
+一个面向课程项目与演示答辩的 NBA 数据分析与比赛预测系统。项目围绕四个核心任务展开：
 
-## 📋 项目概述
+1. 获取球队历史比赛与赛季统计数据。
+2. 构造近期状态、主客场、效率指标等结构化特征。
+3. 同时完成胜负预测和分差预测，并支持不同特征组合对比。
+4. 在 Web UI 中展示预测结果、关键影响因素与图表分析。
 
-本系统通过爬取Basketball Reference网站的历史比赛数据，利用无监督学习方法分析球队风格特征，为用户提供NBA比赛结果预测服务。
+## 项目亮点
 
-### 核心功能
+- 预测链路重构：原先参数稍微改动就可能让结果大幅漂移，现在会先对权重做归一化，再结合赛季特征构建稳定的强度模型。
+- 结果直接上屏：预测结果不再只打印在控制台，UI 现在会展示胜负概率、预测分差、置信度、关键因素和特征重要性。
+- 数据回退机制：当 SQLite 库中某些表为空时，系统会自动回退到 `output/team_features.csv` 与 `output/team_clusters.csv`，保证页面仍可展示完整内容。
+- 界面栏目有实际意义：去掉了原来使用随机数或假数据的图表，所有首页/数据页/球队页图表都改为真实统计值驱动。
 
-- 🕷️ **数据采集**：自动爬取2011-12赛季至今的NBA历史比赛数据
-- 📊 **数据分析**：特征工程、数据清洗、统计报表
-- 🤖 **机器学习**：K-Means聚类分析球队风格、PCA降维提取关键特征
-- 🎯 **比赛预测**：基于历史数据和统计分析的胜负预测
-- 🌐 **Web界面**：可视化数据展示、交互式预测
+## 当前实现概览
 
-## 🛠️ 技术栈
+### 数据来源
 
-| 层级 | 技术 |
-|------|------|
-| 爬虫 | Python + requests + BeautifulSoup |
-| 数据处理 | Pandas + NumPy |
-| 机器学习 | Scikit-learn (K-Means, PCA) |
-| 后端 | Flask |
-| 前端 | HTML/CSS/JS + Bootstrap + ECharts |
-| 数据库 | SQLite |
+- 主要来源：Basketball Reference 历史比赛与球队统计数据
+- 当前本地缓存：
+  - `output/team_features.csv`
+  - `output/team_clusters.csv`
+  - `data/nba.db`
 
-## 📁 项目结构
+说明：
 
+- 项目中保留了爬虫脚本，但当前 Web 演示优先使用本地数据库和缓存特征文件。
+- 如需重新抓取数据，请遵守目标站点 `robots.txt` 与使用条款，不抓取隐私信息，不用于非法用途。
+
+### 预测逻辑
+
+当前预测引擎位于 [ml/predict.py](/C:/Users/24981/NBA_Prediction_TJCEIE/ml/predict.py)。
+
+主要思路：
+
+- 从赛季特征表中提取球队画像。
+- 结合 `win_pct`、`recent_5_win_pct`、`home_win_pct`、`offensive_rating`、`defensive_rating`、`net_rating`、`pace` 等特征构建球队强度。
+- 通过因子分解得到：
+  - `recent_form`
+  - `home_advantage`
+  - `historical_matchup`
+  - `efficiency_diff`
+  - `cluster_similarity`
+- 在高级模式下再叠加实时修正：
+  - 伤病影响
+  - 休息天数
+  - 背靠背
+  - 士气修正
+- 输出：
+  - 主队胜率 / 客队胜率
+  - 预测胜方
+  - 预测分差
+  - 关键因素
+  - 特征重要性
+  - 回测诊断信息
+
+## 项目结构
+
+```text
+NBA_Prediction_TJCEIE/
+├─ app/
+│  ├─ __init__.py
+│  ├─ models/
+│  │  └─ database.py
+│  ├─ static/
+│  │  ├─ css/style.css
+│  │  └─ js/main.js
+│  └─ templates/
+│     ├─ base.html
+│     ├─ index.html
+│     ├─ predict.html
+│     ├─ data.html
+│     ├─ team.html
+│     └─ about.html
+├─ crawler/
+├─ data/
+│  └─ nba.db
+├─ ml/
+│  ├─ __init__.py
+│  ├─ api.py
+│  ├─ cluster.py
+│  ├─ features.py
+│  └─ predict.py
+├─ output/
+│  ├─ team_features.csv
+│  └─ team_clusters.csv
+├─ tests/
+│  └─ test_ml.py
+├─ data_repository.py
+├─ run.py
+├─ requirements.txt
+└─ README.md
 ```
-NBA比赛预测项目/
-├── SPEC.md                 # 项目规格说明文档
-├── README.md               # 项目说明文档
-├── requirements.txt        # Python依赖
-├── config.py               # 配置文件
-├── run.py                  # 应用入口
-│
-├── app/                    # Flask应用
-│   ├── __init__.py
-│   ├── models/
-│   │   └── database.py    # 数据库管理
-│   ├── views.py           # 路由和视图
-│   └── templates/          # HTML模板
-│       ├── index.html
-│       ├── predict.html
-│       ├── team.html
-│       ├── data.html
-│       └── about.html
-│
-├── crawler/               # 爬虫模块
-│   ├── spider.py          # Basketball Reference爬虫
-│   └── parser.py          # 数据解析器
-│
-├── ml/                    # 机器学习模块
-│   ├── features.py        # 特征工程
-│   ├── cluster.py         # 聚类分析
-│   └── predict.py         # 比赛预测
-│
-├── utils/                 # 工具模块
-│   └── logger.py          # 日志记录
-│
-├── data/                  # 数据目录
-│   ├── raw/               # 原始数据
-│   ├── processed/         # 处理后数据
-│   └── nba.db            # SQLite数据库
-│
-└── tests/                 # 测试模块
-    ├── test_crawler.py
-    └── test_ml.py
-```
 
-## 🚀 快速开始
+## 环境依赖
 
-### 1. 环境要求
+建议 Python 3.9 及以上。
 
-- Python 3.9+
-- pip
-
-### 2. 安装依赖
+安装依赖：
 
 ```bash
-cd NBA比赛预测项目
 pip install -r requirements.txt
 ```
 
-### 3. 运行应用
+## 启动方式
 
 ```bash
 python run.py
 ```
 
-访问 http://localhost:5000 查看应用。
+默认地址：
 
-### 4. 运行测试
+```text
+http://127.0.0.1:5000
+```
+
+## 测试方式
+
+核心离线测试：
 
 ```bash
-cd NBA比赛预测项目
-pytest tests/ -v
+python -m unittest tests.test_ml
 ```
 
-## 📖 主要模块说明
+补充烟雾测试：
 
-### 爬虫模块 (crawler/)
-
-**BasketballReferenceSpider** - 数据爬虫类
-
-```python
-from crawler import BasketballReferenceSpider
-
-spider = BasketballReferenceSpider()
-
-# 获取球队比赛日志
-games = spider.fetch_team_game_log('LAL', 2024)
-
-# 获取赛季赛程
-schedule = spider.fetch_season_schedule(2024)
-
-# 历史数据全量爬取
-stats = spider.historical_crawl(start_year=2012, end_year=2024)
-
-spider.close()
+```bash
+python test_prediction_api.py
 ```
 
-**DataParser** - 数据解析器
+## 主要页面
 
-```python
-from crawler import DataParser
+### 1. 首页
 
-parser = DataParser()
+- 展示今日比赛、最近预测、赛季球队排名
+- 展示东西部平均胜率图与赛季回测走势
 
-# 解析比赛数据
-df = parser.parse_game_data(raw_games)
+### 2. 比赛预测页
 
-# 计算衍生特征
-df = parser.compute_derived_features(df, window=5)
+- 支持基础预测
+- 支持高级模式参数调整
+- 显示胜负概率、预测分差、关键因素、实时修正与特征重要性
 
-# 计算球队赛季统计
-season_stats = parser.compute_team_season_stats(df)
-```
+### 3. 数据中心
 
-### 机器学习模块 (ml/)
+- 球队总览卡片
+- 胜率 / 进攻效率 / 防守效率 / 净效率榜单
+- 预测历史表格
+- 场均得分与东西部分布图
 
-**FeatureEngineer** - 特征工程
+### 4. 球队详情页
 
-```python
-from ml import FeatureEngineer
+- 赛季画像
+- 能力雷达图
+- 近期比赛
+- 与其他球队的单指标对比图
 
-engineer = FeatureEngineer()
-
-# 准备特征
-features = engineer.prepare_features(df)
-
-# 标准化
-scaled, scaler = engineer.scale_features(features)
-
-# PCA降维
-reduced, pca = engineer.reduce_dimensions(scaled)
-```
-
-**TeamClusterAnalyzer** - 球队聚类分析
-
-```python
-from ml import TeamClusterAnalyzer
-
-analyzer = TeamClusterAnalyzer()
-
-# 聚类分析
-labels, metrics = analyzer.fit_cluster(features, n_clusters=4)
-
-# 寻找最优聚类数
-optimal_k, results = analyzer.find_optimal_clusters(features)
-```
-
-**GamePredictor** - 比赛预测
-
-```python
-from ml import GamePredictor
-
-predictor = GamePredictor()
-
-# 预测比赛
-result = predictor.predict_game('LAL', 'GSW', home_stats, away_stats)
-
-print(result['predicted_winner'])       # 预测胜者
-print(result['win_probability'])        # 胜率
-print(result['confidence_level'])       # 置信度
-print(result['key_factors'])            # 关键因素
-```
-
-### 数据库模块 (app/models/)
-
-```python
-from app.models import init_database
-
-db = init_database()
-
-# 插入比赛数据
-db.insert_game_data(games)
-
-# 获取比赛数据
-games = db.get_game_data(team_abbr='LAL', season='2023-24')
-
-# 获取球队赛季统计
-stats = db.get_team_season_stats(team_abbr='LAL')
-
-# 保存预测结果
-db.insert_prediction(prediction)
-
-# 获取预测准确率
-accuracy = db.get_prediction_accuracy()
-```
-
-## 🌐 API接口
+## 关键 API
 
 | 接口 | 方法 | 说明 |
-|------|------|------|
-| `/api/home` | GET | 获取首页数据 |
-| `/api/teams` | GET | 获取球队列表 |
-| `/api/team/<abbr>` | GET | 获取球队详情 |
-| `/api/predict` | POST | 预测比赛结果 |
-| `/api/predictions/history` | GET | 获取预测历史 |
-| `/api/games` | GET | 获取比赛列表 |
-| `/api/stats/ranking` | GET | 获取数据排名 |
+|---|---|---|
+| `/api/home` | GET | 首页聚合数据 |
+| `/api/seasons` | GET | 可用赛季列表 |
+| `/api/teams` | GET | 球队赛季画像列表 |
+| `/api/team/<abbr>` | GET | 单支球队详情 |
+| `/api/predict` | POST | 比赛预测 |
+| `/api/predict/validate` | POST | 参数校验 |
+| `/api/predict/params` | GET | 参数说明与默认值 |
+| `/api/predictions/history` | GET | 预测历史 |
+| `/api/games` | GET | 今日比赛或球队近期比赛 |
+| `/api/stats/ranking` | GET | 统计榜单 |
 | `/api/health` | GET | 健康检查 |
 
-## 📊 数据字段
+## 本次优化内容
 
-### 球队比赛数据 (team_game_stats)
+针对当前问题，已完成以下修复：
 
-- `game_id`: 比赛唯一ID
-- `game_date`: 比赛日期
-- `team_id/abbr/name`: 球队信息
-- `opponent_*`: 对手信息
-- `is_home`: 是否主场
-- `result`: 比赛结果 (W/L)
-- `points/opponent_points`: 得分/失分
-- `fg_pct/fg3_pct/ft_pct`: 命中率
-- `rebounds/assists/steals/blocks/turnovers`: 其他统计
+### 1. 预测结果不稳定
 
-### 衍生特征
+- 重构 `ml/predict.py`
+- 使用赛季画像构建更稳健的强度模型
+- 对自定义权重进行归一化，降低参数敏感度
+- 输出回测诊断信息，便于比较不同特征组合
 
-- `recent_5_win_pct`: 近5场胜率
-- `recent_avg_points`: 近5场平均得分
-- `home_win_pct/away_win_pct`: 主/客场胜率
-- `offensive_rating/defensive_rating`: 进攻/防守效率
+### 2. 结果无法在 UI 中显示
 
-## 🔧 配置说明
+- 统一后端接口字段
+- 修复预测结果入库与历史回显字段不一致问题
+- 前端改为直接消费接口返回的概率、分差、关键因素和置信度
 
-主要配置项在 `config.py` 中：
+### 3. UI 栏目无效
 
-```python
-# 数据库配置
-DATABASE_CONFIG = {
-    'type': 'sqlite',
-    'path': 'data/nba.db'
-}
+- 重写首页、预测页、数据页、球队页的交互逻辑
+- 去除随机假数据图表
+- 所有图表改为使用真实缓存特征
+- 修复球队页、预测页中多个无效字段与按钮预填逻辑
 
-# 爬虫配置
-CRAWLER_CONFIG = {
-    'base_url': 'https://www.basketball-reference.com',
-    'request_delay': 3,  # 请求间隔(秒)
-    'max_retries': 3
-}
+## 已知事项
 
-# 机器学习配置
-ML_CONFIG = {
-    'clustering': {'n_clusters': 4},
-    'pca': {'n_components': 0.95}
-}
-```
+- 当前仓库自带的 `env1/` 虚拟环境路径失效，建议新建本地虚拟环境后重新安装依赖。
+- 如果本地没有安装 Flask / scikit-learn / matplotlib 等依赖，Web 服务和部分分析脚本无法运行。
+- 当前离线测试已通过，但由于本会话里无法安装额外依赖并直接启动 Flask，最终浏览器级联调仍建议在本地完整环境中再跑一遍。
 
-## ⚠️ 免责声明
+## 引用与说明
 
-本系统仅供娱乐和学习研究使用。体育比赛结果存在不确定性，任何预测都无法保证100%准确。系统预测仅供参考，不构成任何形式的投注建议。请理性看待预测结果，切勿沉迷投注。
+- 数据源参考：Basketball Reference
+- 本项目允许参考开源实现思路，但请在课程报告中单独注明引用来源，不要直接照搬他人代码或报告。
 
-## 📅 开发计划
+## License
 
-- [x] Phase 1: 爬虫模块 + 数据库
-- [x] Phase 2: 机器学习分析
-- [x] Phase 3: Flask后端 + API
-- [x] Phase 4: 前端页面
-- [ ] Phase 5: 测试优化 + 部署
-
-## 📝 License
-
-MIT License
-
----
-
-*Built with ❤️ for NBA fans*
+MIT
