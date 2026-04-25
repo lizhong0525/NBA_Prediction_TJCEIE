@@ -304,7 +304,7 @@ function bindPredictEvents() {
 
 async function loadTeams() {
     const response = await api.getTeams();
-    availableTeams = response.data || [];
+    availableTeams = Utils.normalizeTeamList(response.data || []);
 
     ['home-team', 'away-team'].forEach(selectId => {
         const select = document.getElementById(selectId);

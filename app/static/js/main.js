@@ -207,6 +207,45 @@ const Utils = {
         };
     },
 
+    normalizeTeam(team = {}) {
+        const abbr = String(team.abbr || team.team_abbr || '').trim();
+        const name = String(team.name || team.team_name || team.full_name || abbr || '--').trim();
+        const teamId = team.id || team.team_id || '';
+        const conference = team.conference || '';
+        const conferenceCn = team.conference_cn
+            || (conference === 'Eastern' ? '东部' : conference === 'Western' ? '西部' : conference || '');
+
+        return {
+            ...team,
+            abbr,
+            team_abbr: abbr,
+            name,
+            team_name: name,
+            full_name: team.full_name || name,
+            id: teamId,
+            team_id: teamId,
+            city: String(team.city || '').trim(),
+            conference,
+            conference_cn: conferenceCn,
+            wins: Number(team.wins ?? 0),
+            losses: Number(team.losses ?? 0),
+            win_pct: Number(team.win_pct ?? team.season_win_pct ?? 0),
+            avg_points: Number(team.avg_points ?? team.points ?? 0),
+            avg_rebounds: Number(team.avg_rebounds ?? team.rebounds ?? 0),
+            avg_assists: Number(team.avg_assists ?? team.assists ?? 0),
+            offensive_rating: Number(team.offensive_rating ?? team.off_rtg ?? 0),
+            defensive_rating: Number(team.defensive_rating ?? team.def_rtg ?? 0),
+            net_rating: Number(team.net_rating ?? team.net_rtg ?? 0),
+            pace: Number(team.pace ?? 0)
+        };
+    },
+
+    normalizeTeamList(teams = []) {
+        return (Array.isArray(teams) ? teams : [])
+            .map(team => Utils.normalizeTeam(team))
+            .filter(team => team.abbr || team.name);
+    },
+
     getUrlParam(name) {
         return new URLSearchParams(window.location.search).get(name);
     }

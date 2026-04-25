@@ -443,7 +443,7 @@ function renderCharts() {
 async function loadCompareTeams(season) {
     try {
         const response = await api.getTeams(season ? { season } : {});
-        compareTeamsPool = (response.data || []).filter(team => team.abbr !== TEAM_ABBR);
+        compareTeamsPool = Utils.normalizeTeamList(response.data || []).filter(team => team.abbr !== TEAM_ABBR);
         document.getElementById('compare-team').innerHTML = `
             <option value="">-- 请选择球队 --</option>
             ${compareTeamsPool.map(team => `<option value="${team.abbr}">${team.abbr} - ${team.name}</option>`).join('')}

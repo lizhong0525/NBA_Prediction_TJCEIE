@@ -208,7 +208,7 @@ async function loadTeams() {
 
     try {
         const response = await api.getTeams(season ? { season } : {});
-        allTeams = response.data || [];
+        allTeams = Utils.normalizeTeamList(response.data || []);
         applyFilters();
     } catch (error) {
         console.error('Failed to load teams:', error);

@@ -133,12 +133,55 @@ def _get_selected_season(requested: str = None) -> str | None:
     return get_latest_season(requested)
 
 
-def _build_team_rows(season: str | None) -> List[Dict[str, Any]]:
+def _build_team_rows_legacy(season: str | None) -> List[Dict[str, Any]]:
     teams = get_team_rankings(season)
     for index, team in enumerate(teams, start=1):
         team["rank"] = index
         team["conference_cn"] = "东部" if team.get("conference") == "Eastern" else "西部"
     return teams
+
+
+def _decorate_team_row(team: Dict[str, Any], rank: int | None = None) -> Dict[str, Any]:
+    team = dict(team)
+    abbr = normalize_team_abbr(team.get("abbr") or team.get("team_abbr") or "")
+    info = TEAM_INFO.get(abbr, {})
+    name = team.get("name") or team.get("team_name") or info.get("name") or abbr
+    team_id = team.get("id") or team.get("team_id") or info.get("id") or ""
+    conference = team.get("conference")
+    conference_cn = team.get("conference_cn")
+
+    if not conference_cn:
+        if conference == "Eastern":
+            conference_cn = "东部"
+        elif conference == "Western":
+            conference_cn = "西部"
+        else:
+            conference_cn = conference or ""
+
+    team.update(
+        {
+            "abbr": abbr,
+            "team_abbr": abbr,
+            "name": name,
+            "team_name": name,
+            "full_name": team.get("full_name") or name,
+            "id": team_id,
+            "team_id": team_id,
+            "city": team.get("city") or info.get("city") or "",
+            "conference_cn": conference_cn,
+            "display_name": f"{abbr} - {name}" if abbr and name else name,
+        }
+    )
+
+    if rank is not None:
+        team["rank"] = rank
+
+    return team
+
+
+def _build_team_rows(season: str | None) -> List[Dict[str, Any]]:
+    teams = get_team_rankings(season)
+    return [_decorate_team_row(team, rank=index) for index, team in enumerate(teams, start=1)]
 
 
 @api_bp.route("/home", methods=["GET"])
@@ -453,11 +496,17 @@ def get_stats_ranking():
         ranked = profiles.sort_values(stat_field, ascending=ascending).reset_index(drop=True)
         data = []
         for index, row in enumerate(ranked.to_dict("records"), start=1):
+            team = _decorate_team_row(row)
             data.append(
                 {
                     "rank": index,
-                    "team_abbr": row.get("team_abbr"),
-                    "team_name": row.get("team_name"),
+                    "team_abbr": team.get("team_abbr"),
+                    "team_name": team.get("team_name"),
+                    "abbr": team.get("abbr"),
+                    "name": team.get("name"),
+                    "full_name": team.get("full_name"),
+                    "team_id": team.get("team_id"),
+                    "id": team.get("id"),
                     "season": row.get("season"),
                     "stat_type": stat_field,
                     "stat_value": round(float(row.get(stat_field) or 0.0), 4),

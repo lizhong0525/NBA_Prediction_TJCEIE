@@ -12,7 +12,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.models.database import init_database
-from data_repository import get_available_seasons, get_team_detail_data, get_team_profiles
+from data_repository import get_available_seasons, get_team_detail_data, get_team_profiles, get_team_rankings
 from ml.predict import (
     get_model_diagnostics,
     predict_game,
@@ -146,6 +146,31 @@ class DatabaseTests(unittest.TestCase):
             db.close()
             if db_path.exists():
                 db_path.unlink()
+
+
+class ApiContractTests(unittest.TestCase):
+    def test_team_rankings_return_frontend_friendly_team_fields(self):
+        teams = get_team_rankings()
+        self.assertTrue(teams)
+
+        team = teams[0]
+        for field in ("abbr", "name", "team_abbr", "team_name", "team_id", "conference_cn"):
+            self.assertIn(field, team)
+
+        self.assertEqual(team["abbr"], team["team_abbr"])
+        self.assertEqual(team["name"], team["team_name"])
+
+    def test_latest_season_metrics_are_normalized_for_ui(self):
+        teams = get_team_rankings("2025-26")
+        self.assertTrue(teams)
+
+        team = teams[0]
+        self.assertLessEqual(team["avg_fg_pct"], 1.0)
+        self.assertLessEqual(team["avg_fg3_pct"], 1.0)
+        self.assertLessEqual(team["avg_ft_pct"], 1.0)
+        self.assertGreater(team["offensive_rating"], 50.0)
+        self.assertGreater(team["defensive_rating"], 50.0)
+        self.assertGreater(team["pace"], 90.0)
 
 
 if __name__ == "__main__":

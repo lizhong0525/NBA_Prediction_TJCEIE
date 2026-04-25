@@ -121,7 +121,7 @@
 
         try {
             const response = await api.getTeams();
-            const teams = (response.data || []).slice(0, 10);
+            const teams = Utils.normalizeTeamList(response.data || []).slice(0, 10);
 
             teams.forEach(team => {
                 const item = document.createElement('li');

@@ -13,7 +13,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
@@ -79,6 +79,24 @@ def _safe_read_csv(path: Path) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
+def _normalize_percentage_series(series: pd.Series) -> pd.Series:
+    values = pd.to_numeric(series, errors="coerce").fillna(0.0)
+    return values.where(values <= 1.0, values / 100.0)
+
+
+def _estimate_pace(avg_points: pd.Series, avg_points_allowed: pd.Series) -> pd.Series:
+    scoring_env = avg_points + avg_points_allowed
+    if scoring_env.empty:
+        return pd.Series(dtype=float)
+
+    center = float(scoring_env.median() or 0.0)
+    if center <= 0:
+        return pd.Series([100.0] * len(scoring_env), index=scoring_env.index, dtype=float)
+
+    pace = 98.0 + (scoring_env - center) / 4.0
+    return pace.clip(lower=92.0, upper=106.0)
+
+
 def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
     query = """
         SELECT name
@@ -130,23 +148,29 @@ def load_team_features_frame() -> pd.DataFrame:
     df["avg_points_allowed"] = pd.to_numeric(
         df.get("opponent_points", 0), errors="coerce"
     ).fillna(0.0)
-    df["avg_fg_pct"] = pd.to_numeric(df.get("fg_pct", 0), errors="coerce").fillna(0.0)
-    df["avg_fg3_pct"] = pd.to_numeric(df.get("fg3_pct", 0), errors="coerce").fillna(0.0)
-    df["avg_ft_pct"] = pd.to_numeric(df.get("ft_pct", 0), errors="coerce").fillna(0.0)
+    df["avg_fg_pct"] = _normalize_percentage_series(df.get("fg_pct", 0))
+    df["avg_fg3_pct"] = _normalize_percentage_series(df.get("fg3_pct", 0))
+    df["avg_ft_pct"] = _normalize_percentage_series(df.get("ft_pct", 0))
     df["avg_rebounds"] = pd.to_numeric(df.get("rebounds", 0), errors="coerce").fillna(0.0)
     df["avg_assists"] = pd.to_numeric(df.get("assists", 0), errors="coerce").fillna(0.0)
     df["avg_steals"] = pd.to_numeric(df.get("steals", 0), errors="coerce").fillna(0.0)
     df["avg_blocks"] = pd.to_numeric(df.get("blocks", 0), errors="coerce").fillna(0.0)
     df["avg_turnovers"] = pd.to_numeric(df.get("turnovers", 0), errors="coerce").fillna(0.0)
     df["avg_fouls"] = pd.to_numeric(df.get("fouls", 0), errors="coerce").fillna(0.0)
-    df["offensive_rating"] = pd.to_numeric(
-        df.get("offensive_rating", 0), errors="coerce"
-    ).fillna(0.0)
-    df["defensive_rating"] = pd.to_numeric(
-        df.get("defensive_rating", 0), errors="coerce"
-    ).fillna(0.0)
-    df["net_rating"] = pd.to_numeric(df.get("net_rating", 0), errors="coerce").fillna(0.0)
-    df["pace"] = pd.to_numeric(df.get("pace", 0), errors="coerce").fillna(0.0)
+    pace = pd.to_numeric(df.get("pace", 0), errors="coerce").fillna(0.0)
+    estimated_pace = _estimate_pace(df["avg_points"], df["avg_points_allowed"])
+    df["pace"] = pace.where(pace > 0, estimated_pace)
+
+    offensive_rating = pd.to_numeric(df.get("offensive_rating", 0), errors="coerce").fillna(0.0)
+    defensive_rating = pd.to_numeric(df.get("defensive_rating", 0), errors="coerce").fillna(0.0)
+    estimated_offensive_rating = (df["avg_points"] / df["pace"].replace(0, 100.0)) * 100.0
+    estimated_defensive_rating = (df["avg_points_allowed"] / df["pace"].replace(0, 100.0)) * 100.0
+
+    df["offensive_rating"] = offensive_rating.where(offensive_rating > 0, estimated_offensive_rating)
+    df["defensive_rating"] = defensive_rating.where(defensive_rating > 0, estimated_defensive_rating)
+    net_rating = pd.to_numeric(df.get("net_rating", 0), errors="coerce").fillna(0.0)
+    estimated_net_rating = df["offensive_rating"] - df["defensive_rating"]
+    df["net_rating"] = net_rating.where(net_rating != 0, estimated_net_rating)
     df["effective_fg_pct"] = pd.to_numeric(
         df.get("effective_fg_pct", 0), errors="coerce"
     ).fillna(0.0)
@@ -237,11 +261,50 @@ def get_team_profiles(season: Optional[str] = None) -> pd.DataFrame:
     return profiles
 
 
+def build_team_summary(team: Dict[str, Any], rank: Optional[int] = None) -> Dict[str, Any]:
+    team = dict(team)
+    abbr = normalize_team_abbr(team.get("abbr") or team.get("team_abbr") or "")
+    info = TEAM_INFO.get(abbr, {})
+    name = team.get("name") or team.get("team_name") or info.get("name") or abbr
+    team_id = team.get("id") or team.get("team_id") or info.get("id") or ""
+    conference = team.get("conference")
+
+    if conference == "Eastern":
+        conference_cn = "东部"
+    elif conference == "Western":
+        conference_cn = "西部"
+    else:
+        conference_cn = conference or ""
+
+    team.update(
+        {
+            "abbr": abbr,
+            "team_abbr": abbr,
+            "name": name,
+            "team_name": name,
+            "full_name": team.get("full_name") or name,
+            "id": team_id,
+            "team_id": team_id,
+            "city": team.get("city") or info.get("city") or "",
+            "conference_cn": team.get("conference_cn") or conference_cn,
+            "display_name": f"{abbr} - {name}" if abbr and name else name,
+        }
+    )
+
+    if rank is not None:
+        team["rank"] = rank
+
+    return team
+
+
 def get_team_rankings(season: Optional[str] = None) -> List[Dict]:
     profiles = get_team_profiles(season)
     if profiles.empty:
         return []
-    return profiles.to_dict("records")
+    return [
+        build_team_summary(row, rank=index)
+        for index, row in enumerate(profiles.to_dict("records"), start=1)
+    ]
 
 
 def get_recent_games(team_abbr: str, limit: int = 10) -> List[Dict]:
@@ -329,11 +392,15 @@ def get_team_detail_data(team_abbr: str, season: Optional[str] = None) -> Option
     if team_rows.empty:
         return None
 
-    row = team_rows.iloc[0].to_dict()
+    row = build_team_summary(team_rows.iloc[0].to_dict())
     info = {
         **TEAM_INFO.get(team_abbr, {"id": "", "name": team_abbr, "city": team_abbr}),
-        "abbr": team_abbr,
+        "abbr": row.get("abbr", team_abbr),
+        "team_abbr": row.get("team_abbr", team_abbr),
+        "team_id": row.get("team_id", ""),
+        "full_name": row.get("full_name") or row.get("name") or team_abbr,
         "conference": row.get("conference", "Unknown"),
+        "conference_cn": row.get("conference_cn") or row.get("conference", "Unknown"),
         "division": row.get("division", "Unknown"),
         "style": row.get("style"),
     }

@@ -165,7 +165,8 @@ async function loadDashboard() {
         ]);
 
         const homeData = homeResponse.data || {};
-        const teams = teamsResponse.data || [];
+        const teams = Utils.normalizeTeamList(teamsResponse.data || []);
+        const topTeams = Utils.normalizeTeamList(homeData.top_teams || []);
 
         document.getElementById('today-games-count').textContent = (homeData.today_games || []).length;
         document.getElementById('model-accuracy').textContent = homeData.model_accuracy
@@ -176,7 +177,7 @@ async function loadDashboard() {
 
         renderTodayGames(homeData.today_games || []);
         renderRecentPredictions(homeData.recent_predictions || []);
-        renderRankingTable((homeData.top_teams || teams).slice(0, 10));
+        renderRankingTable((topTeams.length ? topTeams : teams).slice(0, 10));
         renderConferenceChart(homeData.conference_summary || []);
         renderAccuracyChart((homeData.diagnostics && homeData.diagnostics.season_breakdown) || []);
     } catch (error) {
