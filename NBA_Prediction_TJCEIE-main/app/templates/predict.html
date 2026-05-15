@@ -1,0 +1,801 @@
+{% extends "base.html" %}
+
+{% block title %}比赛预测 - NBA比赛预测系统{% endblock %}
+
+{% block content %}
+<!-- 页面标题 -->
+<section class="hero-section" style="padding: 60px 0;">
+    <div class="container">
+        <h1 class="hero-title" style="font-size: 2.5rem;">
+            <i class="fas fa-chart-line me-3"></i>比赛预测
+        </h1>
+        <p class="hero-subtitle">
+            选择两支球队，系统将基于历史数据和机器学习算法预测比赛结果
+        </p>
+    </div>
+</section>
+
+<!-- 预测表单 -->
+<section class="py-4">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                <form id="predict-form">
+                    <!-- 球队选择区域 -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <i class="fas fa-basketball me-2"></i>选择参赛球队
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-4">
+                                <!-- 主队选择 -->
+                                <div class="col-md-5">
+                                    <div class="text-center mb-3">
+                                        <span class="badge badge-nba">
+                                            <i class="fas fa-home me-1"></i>主队
+                                        </span>
+                                    </div>
+                                    <div id="home-team-selector"></div>
+                                    <input type="hidden" id="home-team" name="home_team">
+                                    <div id="home-team-preview" class="team-preview-card mt-3">
+                                        <div class="team-logo mx-auto" style="background: rgba(255,255,255,0.1);">
+                                            <i class="fas fa-question"></i>
+                                        </div>
+                                        <div class="team-name text-secondary">待选择</div>
+                                    </div>
+                                </div>
+                                
+                                <!-- VS -->
+                                <div class="col-md-2 d-flex align-items-center justify-content-center">
+                                    <div class="text-center">
+                                        <div class="vs-badge">VS</div>
+                                        <div class="small text-secondary mt-2">选择对阵</div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 客队选择 -->
+                                <div class="col-md-5">
+                                    <div class="text-center mb-3">
+                                        <span class="badge badge-orange">
+                                            <i class="fas fa-plane me-1"></i>客队
+                                        </span>
+                                    </div>
+                                    <div id="away-team-selector"></div>
+                                    <input type="hidden" id="away-team" name="away_team">
+                                    <div id="away-team-preview" class="team-preview-card mt-3">
+                                        <div class="team-logo mx-auto" style="background: rgba(255,255,255,0.1);">
+                                            <i class="fas fa-question"></i>
+                                        </div>
+                                        <div class="team-name text-secondary">待选择</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 高级选项 -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span>
+                                <i class="fas fa-sliders-h me-2"></i>高级选项
+                            </span>
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox" id="advanced-toggle">
+                                <label class="form-check-label small" for="advanced-toggle">启用</label>
+                            </div>
+                        </div>
+                        <div class="card-body" id="advanced-panel" style="display: none;">
+                            <p class="text-secondary small mb-4">
+                                <i class="fas fa-info-circle me-1"></i>
+                                开启高级选项可自定义伤病影响、休息天数、权重配置等参数进行更精确的预测
+                            </p>
+                            
+                            <div class="row g-4">
+                                <!-- 主队参数 -->
+                                <div class="col-lg-6">
+                                    <div class="card" style="background: rgba(29, 66, 138, 0.2);">
+                                        <div class="card-header bg-transparent border-0">
+                                            <span class="text-nba-blue fw-bold">
+                                                <i class="fas fa-home me-2"></i>主队参数
+                                            </span>
+                                        </div>
+                                        <div class="card-body pt-0">
+                                            <!-- 伤病影响 -->
+                                            <div class="mb-4">
+                                                <label class="form-label d-flex justify-content-between">
+                                                    <span><i class="fas fa-user-injured me-1"></i>伤病影响</span>
+                                                    <span class="text-nba-orange" id="home-injury-value">0%</span>
+                                                </label>
+                                                <input type="range" class="form-range" id="home-injury" 
+                                                       min="-30" max="0" value="0" step="1">
+                                                <div class="d-flex justify-content-between small text-secondary">
+                                                    <span>严重伤病</span>
+                                                    <span>无伤病</span>
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- 休息天数 -->
+                                            <div class="mb-4">
+                                                <label class="form-label">
+                                                    <i class="fas fa-bed me-1"></i>休息天数
+                                                </label>
+                                                <select class="form-select" id="home-rest-days">
+                                                    <option value="0">背靠背比赛</option>
+                                                    <option value="1">1天</option>
+                                                    <option value="2" selected>2天</option>
+                                                    <option value="3">3天</option>
+                                                    <option value="4">4天以上</option>
+                                                </select>
+                                            </div>
+                                            
+                                            <!-- 背靠背开关 -->
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="home-back-to-back">
+                                                <label class="form-check-label" for="home-back-to-back">
+                                                    <i class="fas fa-calendar-week me-1"></i>背靠背比赛
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 客队参数 -->
+                                <div class="col-lg-6">
+                                    <div class="card" style="background: rgba(245, 132, 38, 0.2);">
+                                        <div class="card-header bg-transparent border-0">
+                                            <span class="text-nba-orange fw-bold">
+                                                <i class="fas fa-plane me-2"></i>客队参数
+                                            </span>
+                                        </div>
+                                        <div class="card-body pt-0">
+                                            <!-- 伤病影响 -->
+                                            <div class="mb-4">
+                                                <label class="form-label d-flex justify-content-between">
+                                                    <span><i class="fas fa-user-injured me-1"></i>伤病影响</span>
+                                                    <span class="text-nba-orange" id="away-injury-value">0%</span>
+                                                </label>
+                                                <input type="range" class="form-range" id="away-injury" 
+                                                       min="-30" max="0" value="0" step="1">
+                                                <div class="d-flex justify-content-between small text-secondary">
+                                                    <span>严重伤病</span>
+                                                    <span>无伤病</span>
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- 休息天数 -->
+                                            <div class="mb-4">
+                                                <label class="form-label">
+                                                    <i class="fas fa-bed me-1"></i>休息天数
+                                                </label>
+                                                <select class="form-select" id="away-rest-days">
+                                                    <option value="0">背靠背比赛</option>
+                                                    <option value="1">1天</option>
+                                                    <option value="2" selected>2天</option>
+                                                    <option value="3">3天</option>
+                                                    <option value="4">4天以上</option>
+                                                </select>
+                                            </div>
+                                            
+                                            <!-- 背靠背开关 -->
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="away-back-to-back">
+                                                <label class="form-check-label" for="away-back-to-back">
+                                                    <i class="fas fa-calendar-week me-1"></i>背靠背比赛
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 权重配置 -->
+                            <div class="mt-4">
+                                <h6 class="text-white mb-3">
+                                    <i class="fas fa-balance-scale me-2"></i>预测因子权重配置
+                                </h6>
+                                <div class="row g-3">
+                                    <div class="col-6 col-md-4 col-lg">
+                                        <div class="p-3 rounded" style="background: rgba(255,255,255,0.05);">
+                                            <label class="form-label small text-secondary">近期状态</label>
+                                            <input type="number" class="form-control form-control-sm" 
+                                                   id="weight-recent" value="0.25" min="0" max="1" step="0.05">
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-4 col-lg">
+                                        <div class="p-3 rounded" style="background: rgba(255,255,255,0.05);">
+                                            <label class="form-label small text-secondary">主场优势</label>
+                                            <input type="number" class="form-control form-control-sm" 
+                                                   id="weight-home" value="0.15" min="0" max="1" step="0.05">
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-4 col-lg">
+                                        <div class="p-3 rounded" style="background: rgba(255,255,255,0.05);">
+                                            <label class="form-label small text-secondary">历史交锋</label>
+                                            <input type="number" class="form-control form-control-sm" 
+                                                   id="weight-historical" value="0.10" min="0" max="1" step="0.05">
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-4 col-lg">
+                                        <div class="p-3 rounded" style="background: rgba(255,255,255,0.05);">
+                                            <label class="form-label small text-secondary">效率差异</label>
+                                            <input type="number" class="form-control form-control-sm" 
+                                                   id="weight-efficiency" value="0.40" min="0" max="1" step="0.05">
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-4 col-lg">
+                                        <div class="p-3 rounded" style="background: rgba(255,255,255,0.05);">
+                                            <label class="form-label small text-secondary">风格相似度</label>
+                                            <input type="number" class="form-control form-control-sm" 
+                                                   id="weight-cluster" value="0.10" min="0" max="1" step="0.05">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 操作按钮 -->
+                    <div class="d-flex justify-content-center gap-3">
+                        <button type="button" id="reset-btn" class="btn btn-secondary btn-lg px-5">
+                            <i class="fas fa-redo me-2"></i>重置
+                        </button>
+                        <button type="button" id="predict-btn" class="btn btn-primary btn-lg px-5">
+                            <i class="fas fa-basketball me-2"></i>开始预测
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- 预测结果 -->
+<section class="py-5" id="result-section">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                <div id="prediction-result">
+                    <!-- 动态渲染预测结果 -->
+                    <div class="card">
+                        <div class="card-body text-center py-5">
+                            <div class="text-secondary">
+                                <i class="fas fa-chart-line fa-4x mb-3" style="opacity: 0.3;"></i>
+                                <p class="mb-0">请选择两支球队，然后点击"开始预测"</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- 预测说明 -->
+<section class="py-5">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                <div class="accordion" id="prediction-accordion">
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" 
+                                    data-bs-toggle="collapse" data-bs-target="#collapseOne">
+                                <i class="fas fa-question-circle me-2"></i>预测原理说明
+                            </button>
+                        </h2>
+                        <div id="collapseOne" class="accordion-collapse collapse" 
+                             data-bs-parent="#prediction-accordion">
+                            <div class="accordion-body text-secondary">
+                                <p>本系统采用机器学习算法，综合考虑以下因素进行预测：</p>
+                                <ul>
+                                    <li><strong>近期状态</strong>：球队最近5-10场比赛的表现</li>
+                                    <li><strong>主场优势</strong>：主场作战对球队胜率的加成</li>
+                                    <li><strong>历史交锋</strong>：两队历史对战记录</li>
+                                    <li><strong>效率差异</strong>：进攻效率、防守效率、净效率等指标</li>
+                                    <li><strong>风格匹配</strong>：基于聚类分析的球队风格相似度</li>
+                                </ul>
+                                <p class="mb-0">高级模式还支持自定义伤病、休息天数等实时参数。</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" 
+                                    data-bs-toggle="collapse" data-bs-target="#collapseTwo">
+                                <i class="fas fa-exclamation-triangle me-2"></i>使用注意事项
+                            </button>
+                        </h2>
+                        <div id="collapseTwo" class="accordion-collapse collapse" 
+                             data-bs-parent="#prediction-accordion">
+                            <div class="accordion-body text-secondary">
+                                <ul class="mb-0">
+                                    <li>预测结果仅供参考，不构成投资建议</li>
+                                    <li>篮球比赛存在不确定性，预测准确率受多种因素影响</li>
+                                    <li>建议结合多方信息做出判断</li>
+                                    <li>系统会持续学习优化，欢迎提供反馈</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<style>
+.vs-badge {
+    display: inline-block;
+    width: 60px;
+    height: 60px;
+    line-height: 60px;
+    text-align: center;
+    background: linear-gradient(135deg, #F58426, #FF9F5A);
+    border-radius: 50%;
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #fff;
+    box-shadow: 0 4px 20px rgba(245, 132, 38, 0.4);
+}
+</style>
+<script>
+// 初始化预测表单
+document.addEventListener('DOMContentLoaded', function() {
+    // URL参数处理
+    const urlParams = new URLSearchParams(window.location.search);
+    const homeTeam = urlParams.get('home');
+    const awayTeam = urlParams.get('away');
+    
+    if (homeTeam && awayTeam) {
+        // 如果URL有球队参数，稍后由TeamSelector设置
+        window.preloadHome = homeTeam;
+        window.preloadAway = awayTeam;
+    }
+
+    // 初始化球队选择器
+    initTeamSelectors();
+    
+    // 初始化高级选项
+    initAdvancedOptions();
+    
+    // 绑定预测按钮
+    document.getElementById('predict-btn').addEventListener('click', handlePredict);
+    
+    // 绑定重置按钮
+    document.getElementById('reset-btn').addEventListener('click', handleReset);
+});
+
+// 初始化球队选择器
+async function initTeamSelectors() {
+    // 获取球队数据
+    let teams = [];
+    try {
+        const response = await api.getTeams();
+        teams = response.data;
+    } catch (error) {
+        console.error('加载球队列表失败:', error);
+        return;
+    }
+    
+    // 创建选择器
+    createTeamSelector('home-team-selector', teams, 'home', (team) => {
+        document.getElementById('home-team').value = team.abbr;
+        updateTeamPreview('home', team);
+    });
+    
+    createTeamSelector('away-team-selector', teams, 'away', (team) => {
+        document.getElementById('away-team').value = team.abbr;
+        updateTeamPreview('away', team);
+    });
+    
+    // 如果URL有预加载参数
+    if (window.preloadHome && window.preloadAway) {
+        setTimeout(() => {
+            const homeTeam = teams.find(t => t.abbr === window.preloadHome);
+            const awayTeam = teams.find(t => t.abbr === window.preloadAway);
+            
+            if (homeTeam) {
+                selectTeamByAbbr('home', homeTeam, teams);
+            }
+            if (awayTeam) {
+                selectTeamByAbbr('away', awayTeam, teams);
+            }
+        }, 500);
+    }
+}
+
+// 创建球队选择器
+function createTeamSelector(containerId, teams, position, onSelect) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    container.innerHTML = `
+        <div class="team-selector">
+            <div class="team-selector-input" tabindex="0">
+                <span class="team-placeholder">选择${position === 'home' ? '主' : '客'}队...</span>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+            <div class="team-selector-dropdown" style="display: none;">
+                <input type="text" class="team-search-input" placeholder="搜索球队...">
+                <div class="team-list"></div>
+            </div>
+        </div>
+    `;
+    
+    const selector = container.querySelector('.team-selector');
+    const input = selector.querySelector('.team-selector-input');
+    const dropdown = selector.querySelector('.team-selector-dropdown');
+    const searchInput = selector.querySelector('.team-search-input');
+    const teamList = selector.querySelector('.team-list');
+    
+    // 点击展开
+    input.addEventListener('click', () => {
+        dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+        if (dropdown.style.display === 'block') {
+            searchInput.focus();
+        }
+    });
+    
+    // 搜索过滤
+    let allTeams = teams;
+    searchInput.addEventListener('input', (e) => {
+        const keyword = e.target.value.toLowerCase();
+        const filtered = allTeams.filter(team => 
+            team.name.toLowerCase().includes(keyword) ||
+            team.city.toLowerCase().includes(keyword) ||
+            team.abbr.toLowerCase().includes(keyword)
+        );
+        renderTeamList(teamList, filtered, position, onSelect);
+    });
+    
+    // 点击外部关闭
+    document.addEventListener('click', (e) => {
+        if (!selector.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+    
+    // 初始渲染
+    renderTeamList(teamList, allTeams, position, onSelect);
+}
+
+// 渲染球队列表
+function renderTeamList(container, teams, position, onSelect) {
+    container.innerHTML = teams.map(team => `
+        <div class="team-option" data-abbr="${team.abbr}">
+            <div class="team-option-logo">${team.abbr}</div>
+            <div class="team-option-info">
+                <div class="team-option-name">${team.name}</div>
+                <div class="team-option-city">${team.city}</div>
+            </div>
+        </div>
+    `).join('');
+    
+    container.querySelectorAll('.team-option').forEach(option => {
+        option.addEventListener('click', () => {
+            const abbr = option.dataset.abbr;
+            const team = teams.find(t => t.abbr === abbr);
+            if (team) {
+                selectTeamByAbbr(position, team, teams);
+                onSelect(team);
+            }
+        });
+    });
+}
+
+// 选择球队
+function selectTeamByAbbr(position, team, allTeams) {
+    const container = document.getElementById(`${position}-team-selector`);
+    const input = container.querySelector('.team-selector-input');
+    const dropdown = container.querySelector('.team-selector-dropdown');
+    
+    input.innerHTML = `
+        <div class="team-selected">
+            <div class="team-option-logo">${team.abbr}</div>
+            <span>${team.name}</span>
+        </div>
+        <i class="fas fa-chevron-down"></i>
+    `;
+    input.classList.add('has-value');
+    dropdown.style.display = 'none';
+}
+
+// 更新球队预览
+function updateTeamPreview(position, team) {
+    const preview = document.getElementById(`${position}-team-preview`);
+    if (preview) {
+        preview.innerHTML = `
+            <div class="team-logo" style="background: linear-gradient(135deg, #1D428A, #2E5BAA);">
+                ${team.abbr}
+            </div>
+            <div class="team-name">${team.name}</div>
+            <div class="team-city">${team.city}</div>
+            ${team.win_pct !== undefined ? `
+                <div class="team-record mt-2">
+                    <span class="badge badge-success">${team.wins}胜</span>
+                    <span class="badge badge-danger">${team.losses}负</span>
+                    <span class="text-nba-orange ms-2">${(team.win_pct * 100).toFixed(1)}%</span>
+                </div>
+            ` : ''}
+        `;
+    }
+}
+
+// 初始化高级选项
+function initAdvancedOptions() {
+    const advancedToggle = document.getElementById('advanced-toggle');
+    const advancedPanel = document.getElementById('advanced-panel');
+    
+    if (advancedToggle && advancedPanel) {
+        advancedToggle.addEventListener('change', (e) => {
+            advancedPanel.style.display = e.target.checked ? 'block' : 'none';
+        });
+    }
+    
+    // 伤病滑块
+    ['home', 'away'].forEach(pos => {
+        const injurySlider = document.getElementById(`${pos}-injury`);
+        const injuryValue = document.getElementById(`${pos}-injury-value`);
+        
+        if (injurySlider && injuryValue) {
+            injurySlider.addEventListener('input', (e) => {
+                injuryValue.textContent = Math.abs(e.target.value) + '%';
+            });
+        }
+    });
+}
+
+// 处理预测
+async function handlePredict() {
+    const homeTeam = document.getElementById('home-team').value;
+    const awayTeam = document.getElementById('away-team').value;
+    
+    // 验证
+    if (!homeTeam || !awayTeam) {
+        Utils.showNotification('请选择主队和客队', 'warning');
+        return;
+    }
+    
+    if (homeTeam === awayTeam) {
+        Utils.showNotification('主队和客队不能相同', 'warning');
+        return;
+    }
+    
+    const btn = document.getElementById('predict-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 预测中...';
+    
+    const resultContainer = document.getElementById('prediction-result');
+    resultContainer.innerHTML = `
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <div class="spinner mx-auto mb-3"></div>
+                <p class="text-secondary mb-0">正在分析数据，请稍候...</p>
+            </div>
+        </div>
+    `;
+    
+    try {
+        const requestData = {
+            home_team: homeTeam,
+            away_team: awayTeam
+        };
+        
+        // 检查高级模式
+        const advancedToggle = document.getElementById('advanced-toggle');
+        if (advancedToggle && advancedToggle.checked) {
+            requestData.mode = 'advanced';
+            requestData.home_params = {
+                injury_impact: parseFloat(document.getElementById('home-injury').value) / 100,
+                rest_days: parseInt(document.getElementById('home-rest-days').value),
+                back_to_back: document.getElementById('home-back-to-back').checked
+            };
+            requestData.away_params = {
+                injury_impact: parseFloat(document.getElementById('away-injury').value) / 100,
+                rest_days: parseInt(document.getElementById('away-rest-days').value),
+                back_to_back: document.getElementById('away-back-to-back').checked
+            };
+            requestData.weights = {
+                recent_form: parseFloat(document.getElementById('weight-recent').value),
+                home_advantage: parseFloat(document.getElementById('weight-home').value),
+                historical_matchup: parseFloat(document.getElementById('weight-historical').value),
+                efficiency_diff: parseFloat(document.getElementById('weight-efficiency').value),
+                cluster_similarity: parseFloat(document.getElementById('weight-cluster').value)
+            };
+        }
+        
+        const response = await api.predictGame(requestData);
+        displayResult(response.data);
+        
+    } catch (error) {
+        resultContainer.innerHTML = `
+            <div class="card">
+                <div class="card-body">
+                    <div class="alert-danger-custom p-4 text-center">
+                        <i class="fas fa-exclamation-circle fa-2x mb-3"></i>
+                        <h5>预测失败</h5>
+                        <p class="mb-0">${error.message || '请稍后重试'}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-basketball me-2"></i>开始预测';
+    }
+}
+
+// 显示预测结果
+function displayResult(result) {
+    const container = document.getElementById('prediction-result');
+    const homeWinProb = result.home_win_probability || result.home_win_prob || 0.5;
+    const awayWinProb = result.away_win_probability || result.away_win_prob || 0.5;
+    const winner = result.predicted_winner || (homeWinProb > awayWinProb ? result.home_team : result.away_team);
+    
+    const confidenceMap = {
+        'high': { text: '高', class: 'badge-success' },
+        'medium': { text: '中', class: 'badge-orange' },
+        'low': { text: '低', class: 'badge-nba' }
+    };
+    const confidence = confidenceMap[result.confidence_level] || confidenceMap['medium'];
+    
+    container.innerHTML = `
+        <div class="prediction-result fade-in">
+            <div class="card">
+                <div class="card-header text-center py-4">
+                    <h4 class="mb-0">
+                        <i class="fas fa-trophy text-warning me-2"></i>
+                        预测胜方
+                    </h4>
+                </div>
+                <div class="card-body text-center py-5">
+                    <div class="prediction-winner mb-3">
+                        ${result.home_team_cn || result.home_team}
+                    </div>
+                    <p class="text-secondary mb-0">
+                        ${winner === result.home_team || winner === homeTeam ? '主队' : '客队'}获胜概率更高
+                    </p>
+                </div>
+            </div>
+            
+            <div class="card mt-4">
+                <div class="card-header">
+                    <i class="fas fa-percentage me-2"></i>胜率分析
+                </div>
+                <div class="card-body">
+                    <div class="row g-4">
+                        <div class="col-6 text-center">
+                            <div class="p-3 rounded" style="background: rgba(29, 66, 138, 0.2);">
+                                <div class="h3 text-nba-blue mb-2">${(homeWinProb * 100).toFixed(1)}%</div>
+                                <div class="text-secondary">${result.home_team_cn || result.home_team || homeTeam}</div>
+                                <div class="progress mt-2" style="height: 8px;">
+                                    <div class="progress-bar" style="width: ${homeWinProb * 100}%; background: #1D428A;"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 text-center">
+                            <div class="p-3 rounded" style="background: rgba(245, 132, 38, 0.2);">
+                                <div class="h3 text-nba-orange mb-2">${(awayWinProb * 100).toFixed(1)}%</div>
+                                <div class="text-secondary">${result.away_team_cn || result.away_team || awayTeam}</div>
+                                <div class="progress mt-2" style="height: 8px;">
+                                    <div class="progress-bar" style="width: ${awayWinProb * 100}%; background: #F58426;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="text-center mt-4">
+                        <span class="badge ${confidence.class} fs-6">
+                            <i class="fas fa-shield-alt me-1"></i>
+                            置信度: ${confidence.text}
+                        </span>
+                    </div>
+                </div>
+            </div>
+            
+            ${result.key_factors && result.key_factors.length ? `
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <i class="fas fa-chart-line me-2"></i>关键因素
+                    </div>
+                    <div class="card-body">
+                        <ul class="list-unstyled mb-0">
+                            ${result.key_factors.map(factor => `
+                                <li class="factor-item">
+                                    <span class="factor-name">
+                                        <i class="fas fa-circle me-2" style="font-size: 0.5rem;"></i>
+                                        ${factor.name}
+                                    </span>
+                                    <span class="factor-impact ${factor.impact > 0 ? 'positive' : 'negative'}">
+                                        ${factor.impact > 0 ? '+' : ''}${(factor.impact * 100).toFixed(1)}%
+                                    </span>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    </div>
+                </div>
+            ` : ''}
+            
+            ${result.adjustments_applied ? `
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <i class="fas fa-sliders-h me-2"></i>参数调整
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-2">
+                            ${Object.entries(result.adjustments_applied).map(([key, value]) => `
+                                <div class="col-md-6 col-lg-4">
+                                    <div class="p-2 rounded" style="background: rgba(255,255,255,0.05);">
+                                        <small class="text-secondary d-block">${key}</small>
+                                        <span class="text-nba-orange">
+                                            ${typeof value === 'number' ? ((value + 1) * 100).toFixed(1) + '%' : value}
+                                        </span>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            ` : ''}
+            
+            <div class="text-center mt-4">
+                <a href="/predict" class="btn btn-outline-primary">
+                    <i class="fas fa-redo me-2"></i>重新预测
+                </a>
+            </div>
+        </div>
+    `;
+    
+    // 滚动到结果
+    document.getElementById('result-section').scrollIntoView({ behavior: 'smooth' });
+}
+
+// 处理重置
+function handleReset() {
+    document.getElementById('predict-form').reset();
+    document.getElementById('home-team').value = '';
+    document.getElementById('away-team').value = '';
+    
+    ['home', 'away'].forEach(pos => {
+        document.getElementById(`${pos}-team-preview`).innerHTML = `
+            <div class="team-logo mx-auto" style="background: rgba(255,255,255,0.1);">
+                <i class="fas fa-question"></i>
+            </div>
+            <div class="team-name text-secondary">待选择</div>
+        `;
+        
+        // 重置选择器
+        const container = document.getElementById(`${pos}-team-selector`);
+        if (container) {
+            const input = container.querySelector('.team-selector-input');
+            if (input) {
+                input.innerHTML = `
+                    <span class="team-placeholder">选择${pos === 'home' ? '主' : '客'}队...</span>
+                    <i class="fas fa-chevron-down"></i>
+                `;
+                input.classList.remove('has-value');
+            }
+        }
+    });
+    
+    // 重置高级选项面板
+    document.getElementById('advanced-panel').style.display = 'none';
+    document.getElementById('home-injury-value').textContent = '0%';
+    document.getElementById('away-injury-value').textContent = '0%';
+    
+    // 重置结果
+    document.getElementById('prediction-result').innerHTML = `
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <div class="text-secondary">
+                    <i class="fas fa-chart-line fa-4x mb-3" style="opacity: 0.3;"></i>
+                    <p class="mb-0">请选择两支球队，然后点击"开始预测"</p>
+                </div>
+            </div>
+        </div>
+    `;
+}
+</script>
+{% endblock %}

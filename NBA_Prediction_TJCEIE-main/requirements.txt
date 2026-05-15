@@ -1,0 +1,24 @@
+# Web
+Flask
+Werkzeug
+
+# Data processing
+pandas
+numpy
+scikit-learn
+
+# Visualization / analysis
+matplotlib
+seaborn
+
+# Crawling / parsing
+requests
+beautifulsoup4
+lxml
+
+# Utilities
+python-dotenv
+pydantic
+
+# Testing
+pytest

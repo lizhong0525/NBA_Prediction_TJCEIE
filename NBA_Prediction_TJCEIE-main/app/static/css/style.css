@@ -1,0 +1,892 @@
+/*!
+ * NBA比赛预测系统 - 主样式文件
+ * NBA Theme: Orange (#F58426) & Blue (#1D428A)
+ */
+
+/* ==================== 变量定义 ==================== */
+:root {
+    --nba-blue: #1D428A;
+    --nba-orange: #F58426;
+    --nba-dark: #0B1026;
+    --nba-light-blue: #2E5BAA;
+    --nba-light-orange: #FF9F5A;
+    --bg-dark: #0a0e1a;
+    --bg-card: rgba(255, 255, 255, 0.05);
+    --border-color: rgba(255, 255, 255, 0.1);
+    --text-primary: #ffffff;
+    --text-secondary: #a0a0a0;
+    --success: #28a745;
+    --danger: #dc3545;
+    --warning: #ffc107;
+    --info: #17a2b8;
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+    --transition-fast: 0.15s ease;
+    --transition-normal: 0.3s ease;
+    --transition-slow: 0.5s ease;
+}
+
+/* ==================== 基础样式 ==================== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: linear-gradient(135deg, var(--nba-dark) 0%, #1a1a2e 50%, var(--bg-dark) 100%);
+    background-attachment: fixed;
+    min-height: 100vh;
+    color: var(--text-primary);
+    line-height: 1.6;
+    overflow-x: hidden;
+}
+
+/* 背景装饰 */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: 
+        radial-gradient(circle at 10% 20%, rgba(29, 66, 138, 0.1) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(245, 132, 38, 0.08) 0%, transparent 40%);
+    pointer-events: none;
+    z-index: -1;
+}
+
+a {
+    color: var(--nba-orange);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+}
+
+a:hover {
+    color: var(--nba-light-orange);
+}
+
+/* ==================== 导航栏 ==================== */
+.navbar {
+    background: rgba(11, 16, 38, 0.95) !important;
+    backdrop-filter: blur(10px);
+    border-bottom: 2px solid var(--nba-orange);
+    padding: 0.8rem 0;
+    box-shadow: var(--shadow-md);
+}
+
+.navbar-brand {
+    color: var(--nba-orange) !important;
+    font-weight: 800;
+    font-size: 1.6rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    letter-spacing: 1px;
+}
+
+.navbar-brand i {
+    font-size: 1.4rem;
+}
+
+.nav-link {
+    color: var(--text-primary) !important;
+    font-weight: 500;
+    padding: 0.6rem 1.2rem !important;
+    border-radius: 8px;
+    transition: all var(--transition-normal);
+    position: relative;
+}
+
+.nav-link::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    width: 0;
+    height: 2px;
+    background: var(--nba-orange);
+    transition: all var(--transition-normal);
+    transform: translateX(-50%);
+}
+
+.nav-link:hover::after,
+.nav-link.active::after {
+    width: 80%;
+}
+
+.nav-link:hover,
+.nav-link.active {
+    color: var(--nba-orange) !important;
+    background: rgba(245, 132, 38, 0.1);
+}
+
+/* ==================== 卡片样式 ==================== */
+.card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    backdrop-filter: blur(10px);
+    transition: all var(--transition-normal);
+}
+
+.card:hover {
+    border-color: rgba(245, 132, 38, 0.3);
+    box-shadow: 0 8px 32px rgba(245, 132, 38, 0.15);
+}
+
+.card-header {
+    background: rgba(29, 66, 138, 0.2);
+    border-bottom: 1px solid var(--border-color);
+    padding: 1rem 1.5rem;
+    font-weight: 600;
+}
+
+.card-body {
+    padding: 1.5rem;
+}
+
+/* ==================== 按钮样式 ==================== */
+.btn {
+    border-radius: 10px;
+    padding: 0.6rem 1.5rem;
+    font-weight: 600;
+    transition: all var(--transition-normal);
+    border: none;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--nba-orange) 0%, var(--nba-light-orange) 100%);
+    border: none;
+    color: #fff;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, var(--nba-light-orange) 0%, var(--nba-orange) 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(245, 132, 38, 0.4);
+}
+
+.btn-outline-primary {
+    border: 2px solid var(--nba-orange);
+    color: var(--nba-orange);
+    background: transparent;
+}
+
+.btn-outline-primary:hover {
+    background: var(--nba-orange);
+    color: #fff;
+}
+
+.btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+}
+
+.btn-success {
+    background: linear-gradient(135deg, var(--success) 0%, #20c997 100%);
+}
+
+.btn-danger {
+    background: linear-gradient(135deg, var(--danger) 0%, #e74c3c 100%);
+}
+
+/* ==================== 表单样式 ==================== */
+.form-control,
+.form-select {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    color: var(--text-primary);
+    padding: 0.8rem 1rem;
+    transition: all var(--transition-normal);
+}
+
+.form-control:focus,
+.form-select:focus {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--nba-orange);
+    box-shadow: 0 0 0 3px rgba(245, 132, 38, 0.2);
+    color: var(--text-primary);
+}
+
+.form-control::placeholder {
+    color: var(--text-secondary);
+}
+
+.form-label {
+    color: var(--text-primary);
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+}
+
+/* ==================== Hero区域 ==================== */
+.hero-section {
+    padding: 100px 0 60px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.hero-title {
+    font-size: 3.5rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #fff 0%, var(--nba-orange) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 20px;
+    line-height: 1.2;
+}
+
+.hero-subtitle {
+    font-size: 1.3rem;
+    color: var(--text-secondary);
+    margin-bottom: 40px;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.hero-badge {
+    display: inline-block;
+    background: rgba(245, 132, 38, 0.2);
+    border: 1px solid var(--nba-orange);
+    border-radius: 50px;
+    padding: 8px 24px;
+    color: var(--nba-orange);
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 20px;
+}
+
+/* ==================== 统计卡片 ==================== */
+.stats-card {
+    background: linear-gradient(135deg, rgba(29, 66, 138, 0.3) 0%, rgba(29, 66, 138, 0.1) 100%);
+    border: 1px solid var(--nba-blue);
+    border-radius: 16px;
+    padding: 30px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.stats-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: linear-gradient(90deg, var(--nba-orange), var(--nba-blue));
+}
+
+.stats-number {
+    font-size: 3rem;
+    font-weight: 800;
+    color: var(--nba-orange);
+    line-height: 1;
+    margin-bottom: 10px;
+}
+
+.stats-label {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.stats-icon {
+    font-size: 2.5rem;
+    color: var(--nba-blue);
+    margin-bottom: 15px;
+}
+
+/* ==================== 球队卡片 ==================== */
+.team-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 25px;
+    text-align: center;
+    cursor: pointer;
+    transition: all var(--transition-normal);
+}
+
+.team-card:hover {
+    transform: translateY(-8px);
+    border-color: var(--nba-orange);
+    box-shadow: 0 12px 40px rgba(245, 132, 38, 0.2);
+}
+
+.team-logo {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--nba-blue) 0%, var(--nba-light-blue) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 15px;
+    font-size: 2rem;
+    font-weight: 700;
+    color: #fff;
+    box-shadow: var(--shadow-md);
+}
+
+.team-name {
+    font-weight: 600;
+    font-size: 1.1rem;
+    margin-bottom: 5px;
+}
+
+.team-city {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.team-record {
+    margin-top: 10px;
+    color: var(--nba-orange);
+    font-weight: 600;
+}
+
+/* ==================== 比赛卡片 ==================== */
+.game-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+    transition: all var(--transition-normal);
+}
+
+.game-card:hover {
+    border-color: var(--nba-orange);
+    transform: scale(1.02);
+}
+
+.game-date {
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 15px;
+}
+
+.game-teams {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.game-team {
+    flex: 1;
+    text-align: center;
+}
+
+.game-team-logo {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: var(--nba-blue);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 10px;
+    font-weight: 700;
+    font-size: 0.85rem;
+}
+
+.game-team-name {
+    font-weight: 600;
+}
+
+.game-vs {
+    color: var(--nba-orange);
+    font-weight: 700;
+    font-size: 1.2rem;
+    padding: 0 20px;
+}
+
+.game-prediction {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid var(--border-color);
+    text-align: center;
+}
+
+/* ==================== 预测结果 ==================== */
+.prediction-result {
+    text-align: center;
+    padding: 40px;
+}
+
+.prediction-winner {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: var(--nba-orange);
+    margin-bottom: 10px;
+}
+
+.prediction-probability {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    margin: 30px 0;
+}
+
+.probability-item {
+    text-align: center;
+}
+
+.probability-value {
+    font-size: 2rem;
+    font-weight: 700;
+}
+
+.probability-label {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.probability-bar {
+    width: 150px;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    margin-top: 10px;
+    overflow: hidden;
+}
+
+.probability-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 1s ease;
+}
+
+/* ==================== 特征重要性 ==================== */
+.factor-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.factor-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.factor-item:last-child {
+    border-bottom: none;
+}
+
+.factor-name {
+    color: var(--text-secondary);
+}
+
+.factor-impact {
+    font-weight: 600;
+}
+
+.factor-impact.positive {
+    color: var(--success);
+}
+
+.factor-impact.negative {
+    color: var(--danger);
+}
+
+/* ==================== 表格样式 ==================== */
+.table {
+    color: var(--text-primary);
+}
+
+.table thead th {
+    background: rgba(29, 66, 138, 0.3);
+    border-bottom: 2px solid var(--nba-orange);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    letter-spacing: 1px;
+    padding: 1rem;
+}
+
+.table tbody td {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    vertical-align: middle;
+}
+
+.table tbody tr:hover {
+    background: rgba(245, 132, 38, 0.05);
+}
+
+.table-striped tbody tr:nth-of-type(odd) {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+/* ==================== 图表容器 ==================== */
+.chart-container {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 30px;
+}
+
+.chart-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--nba-orange);
+}
+
+/* ==================== 加载动画 ==================== */
+.loading-spinner {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 60px;
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid rgba(245, 132, 38, 0.2);
+    border-top-color: var(--nba-orange);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* 骨架屏加载 */
+.skeleton {
+    background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s infinite;
+    border-radius: 8px;
+}
+
+@keyframes skeleton-loading {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+/* ==================== 工具提示 ==================== */
+.tooltip-inner {
+    background: var(--nba-dark);
+    border: 1px solid var(--nba-orange);
+}
+
+/* ==================== 模态框 ==================== */
+.modal-content {
+    background: var(--bg-dark);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+}
+
+.modal-header {
+    border-bottom: 1px solid var(--border-color);
+}
+
+.modal-footer {
+    border-top: 1px solid var(--border-color);
+}
+
+.btn-close {
+    filter: invert(1);
+}
+
+/* ==================== 折叠面板 ==================== */
+.accordion-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px !important;
+    margin-bottom: 10px;
+    overflow: hidden;
+}
+
+.accordion-button {
+    background: rgba(29, 66, 138, 0.2);
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.accordion-button:not(.collapsed) {
+    background: rgba(245, 132, 38, 0.1);
+    color: var(--nba-orange);
+    box-shadow: none;
+}
+
+.accordion-button::after {
+    filter: invert(1);
+}
+
+/* ==================== 滑块样式 ==================== */
+input[type="range"] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    background: var(--nba-orange);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(245, 132, 38, 0.4);
+}
+
+input[type="range"]::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    background: var(--nba-orange);
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+}
+
+/* ==================== 开关样式 ==================== */
+.form-switch .form-check-input {
+    width: 50px;
+    height: 26px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border: none;
+}
+
+.form-switch .form-check-input:checked {
+    background-color: var(--nba-orange);
+}
+
+.form-switch .form-check-input:focus {
+    box-shadow: 0 0 0 3px rgba(245, 132, 38, 0.2);
+}
+
+/* ==================== 标签样式 ==================== */
+.badge {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-weight: 500;
+}
+
+.badge-nba {
+    background: linear-gradient(135deg, var(--nba-blue) 0%, var(--nba-light-blue) 100%);
+}
+
+.badge-orange {
+    background: linear-gradient(135deg, var(--nba-orange) 0%, var(--nba-light-orange) 100%);
+}
+
+.badge-success {
+    background: var(--success);
+}
+
+.badge-danger {
+    background: var(--danger);
+}
+
+/* ==================== 球队风格标签 ==================== */
+.team-style-tag {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin: 3px;
+}
+
+.style-offensive {
+    background: rgba(255, 99, 71, 0.2);
+    border: 1px solid #ff6347;
+    color: #ff6347;
+}
+
+.style-defensive {
+    background: rgba(65, 105, 225, 0.2);
+    border: 1px solid #4169e1;
+    color: #4169e1;
+}
+
+.style-balanced {
+    background: rgba(50, 205, 50, 0.2);
+    border: 1px solid #32cd32;
+    color: #32cd32;
+}
+
+.style-fast {
+    background: rgba(255, 215, 0, 0.2);
+    border: 1px solid #ffd700;
+    color: #ffd700;
+}
+
+/* ==================== 响应式布局 ==================== */
+@media (max-width: 992px) {
+    .hero-title {
+        font-size: 2.5rem;
+    }
+    
+    .hero-subtitle {
+        font-size: 1.1rem;
+    }
+    
+    .stats-number {
+        font-size: 2rem;
+    }
+    
+    .game-teams {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .game-vs {
+        padding: 10px 0;
+    }
+}
+
+@media (max-width: 768px) {
+    .hero-title {
+        font-size: 2rem;
+    }
+    
+    .hero-section {
+        padding: 80px 0 40px;
+    }
+    
+    .card-body {
+        padding: 1rem;
+    }
+    
+    .prediction-probability {
+        flex-direction: column;
+        gap: 20px;
+    }
+    
+    .stats-card {
+        padding: 20px;
+    }
+    
+    .stats-number {
+        font-size: 1.8rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .hero-title {
+        font-size: 1.8rem;
+    }
+    
+    .navbar-brand {
+        font-size: 1.2rem;
+    }
+    
+    .btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
+    }
+}
+
+/* ==================== 辅助类 ==================== */
+.text-nba-orange {
+    color: var(--nba-orange) !important;
+}
+
+.text-nba-blue {
+    color: var(--nba-blue) !important;
+}
+
+.bg-nba-dark {
+    background: var(--nba-dark) !important;
+}
+
+.border-nba-orange {
+    border-color: var(--nba-orange) !important;
+}
+
+.mb-section {
+    margin-bottom: 60px;
+}
+
+.pt-section {
+    padding-top: 80px;
+}
+
+/* 淡入动画 */
+.fade-in {
+    animation: fadeIn 0.5s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* 脉冲动画 */
+.pulse {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+/* 警报提示 */
+.alert-nba {
+    background: rgba(245, 132, 38, 0.1);
+    border: 1px solid var(--nba-orange);
+    border-radius: 12px;
+    color: var(--text-primary);
+}
+
+.alert-success-custom {
+    background: rgba(40, 167, 69, 0.1);
+    border: 1px solid var(--success);
+    border-radius: 12px;
+}
+
+.alert-danger-custom {
+    background: rgba(220, 53, 69, 0.1);
+    border: 1px solid var(--danger);
+    border-radius: 12px;
+}

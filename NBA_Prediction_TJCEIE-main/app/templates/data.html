@@ -1,0 +1,678 @@
+{% extends "base.html" %}
+
+{% block title %}数据中心 - NBA比赛预测系统{% endblock %}
+
+{% block content %}
+<!-- 页面标题 -->
+<section class="hero-section" style="padding: 60px 0;">
+    <div class="container">
+        <h1 class="hero-title" style="font-size: 2.5rem;">
+            <i class="fas fa-database me-3"></i>数据中心
+        </h1>
+        <p class="hero-subtitle">
+            查看所有NBA球队的详细数据和统计信息
+        </p>
+    </div>
+</section>
+
+<!-- 筛选和操作 -->
+<section class="py-3">
+    <div class="container">
+        <div class="card">
+            <div class="card-body">
+                <div class="row g-3 align-items-center">
+                    <div class="col-md-4">
+                        <label class="form-label mb-0">
+                            <i class="fas fa-calendar me-1"></i>选择赛季
+                        </label>
+                        <select class="form-select" id="season-select">
+                            <option value="2024-25" selected>2024-25 赛季</option>
+                            <option value="2023-24">2023-24 赛季</option>
+                            <option value="2022-23">2022-23 赛季</option>
+                            <option value="2021-22">2021-22 赛季</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label mb-0">
+                            <i class="fas fa-filter me-1"></i>筛选类型
+                        </label>
+                        <select class="form-select" id="filter-select">
+                            <option value="all">全部球队</option>
+                            <option value="eastern">东部联盟</option>
+                            <option value="western">西部联盟</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label mb-0">
+                            <i class="fas fa-search me-1"></i>搜索球队
+                        </label>
+                        <input type="text" class="form-control" id="team-search" placeholder="输入球队名称或缩写...">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- 球队列表 -->
+<section class="py-4" id="teams">
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="text-white mb-0">
+                <i class="fas fa-users me-2 text-nba-orange"></i>球队列表
+            </h2>
+            <div>
+                <button class="btn btn-sm btn-outline-primary me-2" onclick="exportData('csv')">
+                    <i class="fas fa-download me-1"></i>导出CSV
+                </button>
+                <button class="btn btn-sm btn-outline-primary" onclick="exportData('json')">
+                    <i class="fas fa-download me-1"></i>导出JSON
+                </button>
+            </div>
+        </div>
+        
+        <div class="row g-4" id="teams-grid">
+            <!-- 动态加载 -->
+            <div class="col-12 text-center py-5">
+                <div class="spinner mx-auto mb-3"></div>
+                <p class="text-secondary">加载球队数据...</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- 统计排名 -->
+<section class="py-5" id="ranking">
+    <div class="container">
+        <h2 class="text-white mb-4">
+            <i class="fas fa-list-ol me-2 text-nba-orange"></i>数据排名
+        </h2>
+        
+        <div class="row g-4">
+            <!-- 胜率排名 -->
+            <div class="col-lg-6">
+                <div class="chart-container">
+                    <div class="chart-title">
+                        <i class="fas fa-trophy me-2 text-nba-orange"></i>胜率排名 Top 10
+                    </div>
+                    <div id="win-pct-chart" style="height: 350px;"></div>
+                </div>
+            </div>
+            
+            <!-- 进攻效率排名 -->
+            <div class="col-lg-6">
+                <div class="chart-container">
+                    <div class="chart-title">
+                        <i class="fas fa-bullseye me-2 text-nba-orange"></i>进攻效率排名 Top 10
+                    </div>
+                    <div id="offense-chart" style="height: 350px;"></div>
+                </div>
+            </div>
+            
+            <!-- 防守效率排名 -->
+            <div class="col-lg-6">
+                <div class="chart-container">
+                    <div class="chart-title">
+                        <i class="fas fa-shield-alt me-2 text-nba-orange"></i>防守效率排名 Top 10
+                    </div>
+                    <div id="defense-chart" style="height: 350px;"></div>
+                </div>
+            </div>
+            
+            <!-- 净效率排名 -->
+            <div class="col-lg-6">
+                <div class="chart-container">
+                    <div class="chart-title">
+                        <i class="fas fa-balance-scale me-2 text-nba-orange"></i>净效率排名 Top 10
+                    </div>
+                    <div id="net-rtg-chart" style="height: 350px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- 预测历史 -->
+<section class="py-5" id="predictions">
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="text-white mb-0">
+                <i class="fas fa-history me-2 text-nba-orange"></i>预测历史
+            </h2>
+            <div class="text-secondary">
+                <span id="prediction-total">0</span> 条记录
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th class="text-center" style="width: 80px;">序号</th>
+                                <th>比赛对阵</th>
+                                <th class="text-center">预测结果</th>
+                                <th class="text-center">胜率</th>
+                                <th class="text-center d-none d-md-table-cell">置信度</th>
+                                <th class="text-center d-none d-lg-table-cell">时间</th>
+                            </tr>
+                        </thead>
+                        <tbody id="predictions-table">
+                            <!-- 动态加载 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card-footer text-center" id="load-more-container" style="display: none;">
+                <button class="btn btn-outline-primary" id="load-more-btn">
+                    <i class="fas fa-plus me-2"></i>加载更多
+                </button>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- 图表区域 -->
+<section class="py-5" id="charts">
+    <div class="container">
+        <h2 class="text-white mb-4">
+            <i class="fas fa-chart-pie me-2 text-nba-orange"></i>数据分析
+        </h2>
+        
+        <div class="row g-4">
+            <div class="col-lg-6">
+                <div class="chart-container">
+                    <div class="chart-title">
+                        <i class="fas fa-chart-bar me-2 text-nba-orange"></i>场均得分分布
+                    </div>
+                    <div id="avg-points-chart" style="height: 300px;"></div>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="chart-container">
+                    <div class="chart-title">
+                        <i class="fas fa-chart-pie me-2 text-nba-orange"></i>东西部占比
+                    </div>
+                    <div id="conference-pie-chart" style="height: 300px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 全局数据存储
+let allTeams = [];
+let allPredictions = [];
+let currentPage = 1;
+const pageSize = 10;
+
+// 东部球队
+const EASTERN_TEAMS = ['ATL', 'BOS', 'BRK', 'CHI', 'CHO', 'CLE', 'DET', 'IND', 'MIA', 'MIL', 'NYK', 'ORL', 'PHI', 'TOR', 'WAS'];
+// 西部球队
+const WESTERN_TEAMS = ['DAL', 'DEN', 'GSW', 'HOU', 'LAC', 'LAL', 'MEM', 'MIN', 'NOP', 'OKC', 'PHO', 'POR', 'SAC', 'SAS', 'UTA'];
+
+// 页面加载
+document.addEventListener('DOMContentLoaded', async function() {
+    // 加载球队数据
+    await loadTeams();
+    
+    // 加载预测历史
+    await loadPredictions();
+    
+    // 初始化图表
+    initCharts();
+    
+    // 绑定事件
+    bindEvents();
+});
+
+// 加载球队数据
+async function loadTeams() {
+    try {
+        const response = await api.getTeams();
+        if (response.success) {
+            allTeams = response.data;
+            renderTeams(allTeams);
+            updateCharts(allTeams);
+        }
+    } catch (error) {
+        console.error('加载球队数据失败:', error);
+        document.getElementById('teams-grid').innerHTML = `
+            <div class="col-12">
+                <div class="alert-danger-custom text-center py-4">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    加载失败，请刷新页面重试
+                </div>
+            </div>
+        `;
+    }
+}
+
+// 渲染球队卡片
+function renderTeams(teams) {
+    const container = document.getElementById('teams-grid');
+    
+    if (teams.length === 0) {
+        container.innerHTML = `
+            <div class="col-12 text-center py-5">
+                <i class="fas fa-search fa-3x text-secondary mb-3"></i>
+                <p class="text-secondary">未找到匹配球队</p>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = teams.map(team => {
+        const conference = EASTERN_TEAMS.includes(team.abbr) ? '东部' : '西部';
+        const conferenceColor = EASTERN_TEAMS.includes(team.abbr) ? '#1D428A' : '#F58426';
+        
+        return `
+            <div class="col-6 col-md-4 col-lg-3 col-xl-2">
+                <a href="/team/${team.abbr}" class="text-decoration-none">
+                    <div class="team-card h-100">
+                        <div class="team-logo">${team.abbr}</div>
+                        <div class="team-name">${team.name}</div>
+                        <div class="team-city">${team.city}</div>
+                        <div class="mt-2">
+                            <span class="badge" style="background: ${conferenceColor}; font-size: 0.7rem;">
+                                ${conference}
+                            </span>
+                        </div>
+                        ${team.win_pct !== undefined ? `
+                            <div class="team-record">
+                                ${team.wins}-${team.losses}
+                                <span class="text-nba-orange">${(team.win_pct * 100).toFixed(1)}%</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                </a>
+            </div>
+        `;
+    }).join('');
+}
+
+// 加载预测历史
+async function loadPredictions() {
+    try {
+        const response = await api.getPredictionHistory(100);
+        if (response.success) {
+            allPredictions = response.data.predictions || [];
+            document.getElementById('prediction-total').textContent = allPredictions.length;
+            renderPredictions(allPredictions.slice(0, pageSize));
+            
+            if (allPredictions.length > pageSize) {
+                document.getElementById('load-more-container').style.display = 'block';
+            }
+        }
+    } catch (error) {
+        console.error('加载预测历史失败:', error);
+    }
+}
+
+// 渲染预测历史表格
+function renderPredictions(predictions) {
+    const tbody = document.getElementById('predictions-table');
+    
+    if (predictions.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" class="text-center py-5">
+                    <i class="fas fa-inbox fa-3x text-secondary mb-3"></i>
+                    <p class="text-secondary mb-0">暂无预测记录</p>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = predictions.map((pred, index) => {
+        const confidenceMap = {
+            'high': { text: '高', class: 'badge-success' },
+            'medium': { text: '中', class: 'badge-orange' },
+            'low': { text: '低', class: 'badge-nba' }
+        };
+        const confidence = confidenceMap[pred.confidence] || confidenceMap['medium'];
+        
+        return `
+            <tr>
+                <td class="text-center">${index + 1}</td>
+                <td>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge badge-nba">${pred.home_team}</span>
+                        <span class="text-secondary">vs</span>
+                        <span class="badge badge-orange">${pred.away_team}</span>
+                    </div>
+                </td>
+                <td class="text-center">
+                    <span class="text-nba-orange fw-bold">
+                        <i class="fas fa-trophy me-1"></i>${pred.predicted_winner}
+                    </span>
+                </td>
+                <td class="text-center">
+                    <span class="text-nba-blue">${((pred.home_win_prob || 0.5) * 100).toFixed(1)}%</span>
+                    <span class="text-secondary mx-1">/</span>
+                    <span class="text-nba-orange">${((pred.away_win_prob || 0.5) * 100).toFixed(1)}%</span>
+                </td>
+                <td class="text-center d-none d-md-table-cell">
+                    <span class="badge ${confidence.class}">${confidence.text}</span>
+                </td>
+                <td class="text-center text-secondary d-none d-lg-table-cell small">
+                    ${pred.prediction_time || '--'}
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// 初始化图表
+function initCharts() {
+    // 图表将根据数据更新
+}
+
+// 更新图表
+function updateCharts(teams) {
+    // 排序获取Top 10
+    const sortedByWinPct = [...teams].sort((a, b) => (b.win_pct || 0.5) - (a.win_pct || 0.5)).slice(0, 10);
+    
+    // 胜率排名图
+    const winPctChart = echarts.init(document.getElementById('win-pct-chart'));
+    winPctChart.setOption({
+        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+        xAxis: {
+            type: 'value',
+            axisLabel: { color: '#a0a0a0', formatter: '{value}%' },
+            splitLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }
+        },
+        yAxis: {
+            type: 'category',
+            data: sortedByWinPct.map(t => t.abbr).reverse(),
+            axisLabel: { color: '#a0a0a0' }
+        },
+        series: [{
+            type: 'bar',
+            data: sortedByWinPct.map(t => ((t.win_pct || 0.5) * 100).toFixed(1)).reverse(),
+            itemStyle: {
+                color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+                    { offset: 0, color: '#F58426' },
+                    { offset: 1, color: '#FF9F5A' }
+                ]),
+                borderRadius: [0, 5, 5, 0]
+            },
+            barWidth: '60%'
+        }]
+    });
+    
+    // 进攻效率图 (模拟数据)
+    const offenseData = teams.slice(0, 10).map(t => ({
+        abbr: t.abbr,
+        value: 105 + Math.random() * 15
+    })).sort((a, b) => b.value - a.value);
+    
+    const offenseChart = echarts.init(document.getElementById('offense-chart'));
+    offenseChart.setOption({
+        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+        xAxis: {
+            type: 'category',
+            data: offenseData.map(d => d.abbr),
+            axisLabel: { color: '#a0a0a0', rotate: 45 }
+        },
+        yAxis: {
+            type: 'value',
+            axisLabel: { color: '#a0a0a0' },
+            splitLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }
+        },
+        series: [{
+            type: 'bar',
+            data: offenseData.map(d => d.value.toFixed(1)),
+            itemStyle: {
+                color: '#28a745',
+                borderRadius: [5, 5, 0, 0]
+            }
+        }]
+    });
+    
+    // 防守效率图 (模拟数据，越低越好)
+    const defenseData = teams.slice(0, 10).map(t => ({
+        abbr: t.abbr,
+        value: 100 + Math.random() * 15
+    })).sort((a, b) => a.value - b.value);
+    
+    const defenseChart = echarts.init(document.getElementById('defense-chart'));
+    defenseChart.setOption({
+        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+        xAxis: {
+            type: 'category',
+            data: defenseData.map(d => d.abbr),
+            axisLabel: { color: '#a0a0a0', rotate: 45 }
+        },
+        yAxis: {
+            type: 'value',
+            axisLabel: { color: '#a0a0a0' },
+            splitLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }
+        },
+        series: [{
+            type: 'bar',
+            data: defenseData.map(d => d.value.toFixed(1)),
+            itemStyle: {
+                color: '#dc3545',
+                borderRadius: [5, 5, 0, 0]
+            }
+        }]
+    });
+    
+    // 净效率图 (模拟数据)
+    const netRtgData = teams.slice(0, 10).map(t => ({
+        abbr: t.abbr,
+        value: (Math.random() - 0.5) * 20
+    })).sort((a, b) => b.value - a.value);
+    
+    const netRtgChart = echarts.init(document.getElementById('net-rtg-chart'));
+    netRtgChart.setOption({
+        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+        xAxis: {
+            type: 'category',
+            data: netRtgData.map(d => d.abbr),
+            axisLabel: { color: '#a0a0a0', rotate: 45 }
+        },
+        yAxis: {
+            type: 'value',
+            axisLabel: { color: '#a0a0a0' },
+            splitLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }
+        },
+        series: [{
+            type: 'bar',
+            data: netRtgData.map(d => d.value.toFixed(1)),
+            itemStyle: {
+                color: (params) => params.value >= 0 ? '#28a745' : '#dc3545',
+                borderRadius: [5, 5, 0, 0]
+            }
+        }]
+    });
+    
+    // 场均得分分布
+    const avgPointsChart = echarts.init(document.getElementById('avg-points-chart'));
+    avgPointsChart.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+        xAxis: {
+            type: 'category',
+            data: teams.slice(0, 15).map(t => t.abbr),
+            axisLabel: { color: '#a0a0a0', rotate: 45 }
+        },
+        yAxis: {
+            type: 'value',
+            axisLabel: { color: '#a0a0a0' },
+            splitLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }
+        },
+        series: [{
+            type: 'bar',
+            data: teams.slice(0, 15).map(() => (105 + Math.random() * 15).toFixed(1)),
+            itemStyle: {
+                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                    { offset: 0, color: '#F58426' },
+                    { offset: 1, color: '#1D428A' }
+                ])
+            }
+        }]
+    });
+    
+    // 东西部占比饼图
+    const conferenceChart = echarts.init(document.getElementById('conference-pie-chart'));
+    conferenceChart.setOption({
+        tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+        legend: {
+            orient: 'vertical',
+            right: 10,
+            top: 'center',
+            textStyle: { color: '#a0a0a0' }
+        },
+        series: [{
+            type: 'pie',
+            radius: ['40%', '70%'],
+            center: ['40%', '50%'],
+            data: [
+                { value: 15, name: '东部', itemStyle: { color: '#1D428A' } },
+                { value: 15, name: '西部', itemStyle: { color: '#F58426' } }
+            ],
+            itemStyle: {
+                borderRadius: 5,
+                borderColor: '#0B1026',
+                borderWidth: 2
+            }
+        }]
+    });
+    
+    // 响应式
+    window.addEventListener('resize', () => {
+        winPctChart.resize();
+        offenseChart.resize();
+        defenseChart.resize();
+        netRtgChart.resize();
+        avgPointsChart.resize();
+        conferenceChart.resize();
+    });
+}
+
+// 绑定事件
+function bindEvents() {
+    // 赛季筛选
+    document.getElementById('season-select').addEventListener('change', function() {
+        loadTeams(); // 重新加载数据
+    });
+    
+    // 类型筛选
+    document.getElementById('filter-select').addEventListener('change', function() {
+        const value = this.value;
+        let filtered = allTeams;
+        
+        if (value === 'eastern') {
+            filtered = allTeams.filter(t => EASTERN_TEAMS.includes(t.abbr));
+        } else if (value === 'western') {
+            filtered = allTeams.filter(t => WESTERN_TEAMS.includes(t.abbr));
+        }
+        
+        renderTeams(filtered);
+    });
+    
+    // 搜索
+    document.getElementById('team-search').addEventListener('input', Utils.debounce(function() {
+        const keyword = this.value.toLowerCase();
+        if (!keyword) {
+            renderTeams(allTeams);
+            return;
+        }
+        
+        const filtered = allTeams.filter(t => 
+            t.name.toLowerCase().includes(keyword) ||
+            t.abbr.toLowerCase().includes(keyword) ||
+            t.city.toLowerCase().includes(keyword)
+        );
+        renderTeams(filtered);
+    }, 300));
+    
+    // 加载更多
+    document.getElementById('load-more-btn').addEventListener('click', function() {
+        currentPage++;
+        const start = (currentPage - 1) * pageSize;
+        const end = start + pageSize;
+        const more = allPredictions.slice(start, end);
+        
+        const tbody = document.getElementById('predictions-table');
+        tbody.innerHTML += more.map((pred, index) => {
+            const confidenceMap = {
+                'high': { text: '高', class: 'badge-success' },
+                'medium': { text: '中', class: 'badge-orange' },
+                'low': { text: '低', class: 'badge-nba' }
+            };
+            const confidence = confidenceMap[pred.confidence] || confidenceMap['medium'];
+            
+            return `
+                <tr>
+                    <td class="text-center">${start + index + 1}</td>
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge badge-nba">${pred.home_team}</span>
+                            <span class="text-secondary">vs</span>
+                            <span class="badge badge-orange">${pred.away_team}</span>
+                        </div>
+                    </td>
+                    <td class="text-center">
+                        <span class="text-nba-orange fw-bold">
+                            <i class="fas fa-trophy me-1"></i>${pred.predicted_winner}
+                        </span>
+                    </td>
+                    <td class="text-center">
+                        <span class="text-nba-blue">${((pred.home_win_prob || 0.5) * 100).toFixed(1)}%</span>
+                        <span class="text-secondary mx-1">/</span>
+                        <span class="text-nba-orange">${((pred.away_win_prob || 0.5) * 100).toFixed(1)}%</span>
+                    </td>
+                    <td class="text-center d-none d-md-table-cell">
+                        <span class="badge ${confidence.class}">${confidence.text}</span>
+                    </td>
+                    <td class="text-center text-secondary d-none d-lg-table-cell small">
+                        ${pred.prediction_time || '--'}
+                    </td>
+                </tr>
+            `;
+        }).join('');
+        
+        if (end >= allPredictions.length) {
+            document.getElementById('load-more-container').style.display = 'none';
+        }
+    });
+}
+
+// 导出数据
+function exportData(format) {
+    if (format === 'csv') {
+        let csv = '缩写,名称,城市,胜,负,胜率\n';
+        allTeams.forEach(team => {
+            csv += `${team.abbr},${team.name},${team.city},${team.wins || 0},${team.losses || 0},${((team.win_pct || 0.5) * 100).toFixed(1)}%\n`;
+        });
+        downloadFile(csv, 'teams_data.csv', 'text/csv');
+    } else {
+        const json = JSON.stringify(allTeams, null, 2);
+        downloadFile(json, 'teams_data.json', 'application/json');
+    }
+}
+
+// 下载文件
+function downloadFile(content, filename, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+</script>
+{% endblock %}

@@ -1,0 +1,20 @@
+# Virtual environments
+env/
+env1/
+nba_env/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local data / runtime artifacts
+.tmp/
+data/
+logs/*.log
+
+# IDE files
+.vs/
+.vscode/
